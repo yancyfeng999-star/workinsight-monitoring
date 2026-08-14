@@ -1,0 +1,23 @@
+{
+  "schema_version": 1,
+  "event_id": "evt_fixture_system_0001",
+  "org_id": "org_fixture",
+  "device_id": "dev_fixture_001",
+  "subject_id": "sub_fixture_001",
+  "sequence_no": 1,
+  "source": "system",
+  "kind": "focus_segment",
+  "started_at": "2026-08-10T01:23:45.000Z",
+  "ended_at": "2026-08-10T01:28:45.000Z",
+  "timezone": "Asia/Shanghai",
+  "activity": {
+    "app_id": "com.apple.Xcode",
+    "app_name": "Xcode",
+    "window_title": null,
+    "browser": null,
+    "registrable_domain": null,
+    "url_path": null
+  },
+  "privacy": "normal",
+  "agent": { "version": "0.1.0", "os": "macos" }
+}

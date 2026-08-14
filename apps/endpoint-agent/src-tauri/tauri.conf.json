@@ -1,0 +1,43 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "WorkInsight Agent",
+  "version": "0.1.0",
+  "identifier": "com.workinsight.agent",
+  "build": {
+    "beforeDevCommand": "npm --prefix ../endpoint-agent/src-ui run dev",
+    "beforeBuildCommand": "npm --prefix ../endpoint-agent/src-ui run build",
+    "devUrl": "http://localhost:1420",
+    "frontendDist": "../src-ui/dist"
+  },
+  "app": {
+    "windows": [
+      {
+        "label": "setup",
+        "title": "WorkInsight · 设备接入",
+        "width": 480,
+        "height": 560,
+        "resizable": false,
+        "center": true,
+        "visible": true
+      }
+    ],
+    "security": {
+      "csp": null
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": ["app", "dmg"],
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.icns",
+      "icons/icon.ico"
+    ],
+    "resources": {
+      "bundles/launch-agent.plist": "Library/LaunchAgents/com.workinsight.agent.plist"
+    }
+  },
+  "plugins": {}
+}

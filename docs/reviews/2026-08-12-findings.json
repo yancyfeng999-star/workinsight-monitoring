@@ -1,0 +1,146 @@
+{
+  "audit_date": "2026-08-12",
+  "branch": "fix/wave0-1",
+  "commit": "5021f94d34d103e0fd780d326558eb57cfc9c1e8",
+  "platform": "macOS (darwin)",
+  "verdict": "FAIL",
+  "p0_count": 7,
+  "p1_count": 5,
+  "p2_count": 3,
+  "p3_count": 1,
+  "findings": [
+    {
+      "id": "B-001",
+      "severity": "P0",
+      "title": "Release Engine 不加载 enrollment 身份",
+      "component": "endpoint-agent/src-tauri/src/lib.rs",
+      "evidence": "lib.rs:166-176: #[cfg(debug_assertions)] block uses synthetic identity; release builds have no enrollment load path",
+      "status": "Open"
+    },
+    {
+      "id": "B-002",
+      "severity": "P0",
+      "title": "Runtime 不调用 Uploader",
+      "component": "endpoint-agent/src-tauri/src/lib.rs",
+      "evidence": "collector_loop (lib.rs:144-236) has no Uploader call; secret_token() returns None (lib.rs:292-297)",
+      "status": "Open"
+    },
+    {
+      "id": "B-003",
+      "severity": "P0",
+      "title": "产品路径使用 plain LocalStore",
+      "component": "endpoint-agent/src-tauri/crates/local-store/src/queue.rs",
+      "evidence": "queue.rs:49-53: open() calls open_plain(); lib.rs:159 uses LocalStore::open()",
+      "status": "Open"
+    },
+    {
+      "id": "B-004",
+      "severity": "P0",
+      "title": "MemorySecretStore 与 secret_token=None",
+      "component": "endpoint-agent/src-tauri/src/lib.rs",
+      "evidence": "lib.rs:59-61,74-76: MemorySecretStore hardcoded; lib.rs:292-297: secret_token() returns None",
+      "status": "Open"
+    },
+    {
+      "id": "B-005",
+      "severity": "P0",
+      "title": "Tauri windows 为空，首次 UI 不可达",
+      "component": "endpoint-agent/src-tauri/tauri.conf.json",
+      "evidence": "tauri.conf.json:13: \"windows\": []",
+      "status": "Open"
+    },
+    {
+      "id": "B-006",
+      "severity": "P0",
+      "title": "Extension 与 Host 协议不一致（部分修复）",
+      "component": "browser-extension + browser-bridge",
+      "evidence": "browser-native-messaging.md: tests pass but only with simulated extension, not real Chrome",
+      "status": "Open"
+    },
+    {
+      "id": "B-007",
+      "severity": "P0",
+      "title": "Windows transport/autostart/collector 未接主路径",
+      "component": "collector-windows",
+      "evidence": "windows-runtime.md: code exists but no Windows Runner for verification",
+      "status": "Blocked"
+    },
+    {
+      "id": "B-010",
+      "severity": "P1",
+      "title": "enrollment 事务和并发 single-use 不可靠",
+      "component": "api/src/routes/enrollment.ts",
+      "evidence": "enrollment.ts:38-58: uses pool.query('BEGIN') not dedicated client; concurrency untested",
+      "status": "Open"
+    },
+    {
+      "id": "B-011",
+      "severity": "P1",
+      "title": "health Schema 和健康事实未闭环",
+      "component": "health crate + lib.rs",
+      "evidence": "lib.rs:238-290: report_health skips due to secret_token=None; permissions_ok/autostart hardcoded true",
+      "status": "Open"
+    },
+    {
+      "id": "B-012",
+      "severity": "P1",
+      "title": "delivery-status 与证据冲突",
+      "component": "docs/evidence/delivery-status.json",
+      "evidence": "local_review:pass, runtime_verified_mac:pass but 7 P0 findings exist",
+      "status": "Open"
+    },
+    {
+      "id": "B-013",
+      "severity": "P1",
+      "title": "Worker/Web/AI 实际为空",
+      "component": "apps/worker, apps/web-console",
+      "evidence": "worker/src/jobs/ empty; web-console/src/ empty",
+      "status": "Open"
+    },
+    {
+      "id": "B-015",
+      "severity": "P2",
+      "title": "UI 测试复制 HTML，不测真实 main.ts",
+      "component": "endpoint-agent/src-ui",
+      "evidence": "待进一步验证",
+      "status": "Open"
+    },
+    {
+      "id": "B-016",
+      "severity": "P2",
+      "title": "Git 跟踪 __pycache__",
+      "component": "tools/release-verifier",
+      "evidence": "tools/release-verifier/__pycache__/test_verify_agent.cpython-314.pyc tracked by git",
+      "status": "Open"
+    },
+    {
+      "id": "P3-001",
+      "severity": "P3",
+      "title": "文档一致性",
+      "component": "README.md",
+      "evidence": "README claims 'Phase 1 修复中' but delivery-status claims multiple pass",
+      "status": "Open"
+    }
+  ],
+  "gate_results": {
+    "A_repo_evidence": "FAIL",
+    "B_contracts": "PASS",
+    "C_runtime": "FAIL",
+    "D_platform": "BLOCKED",
+    "E_browser": "PASS",
+    "F_api_db_rbac": "PARTIAL",
+    "G_worker": "FAIL",
+    "H_web_ux": "FAIL",
+    "I_ai": "FAIL",
+    "J_reliability": "BLOCKED",
+    "K_delivery": "FAIL"
+  },
+  "fresh_tests": {
+    "cargo_fmt": "PASS",
+    "cargo_clippy": "PASS (0 warnings)",
+    "cargo_test": "PASS (110 tests)",
+    "browser_extension_npm_test": "PASS (19/19)",
+    "api_npm_test": "PASS (22/22)",
+    "release_verifier": "PASS (5/5)"
+  }
+}

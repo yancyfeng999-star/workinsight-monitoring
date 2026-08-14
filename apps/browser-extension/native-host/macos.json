@@ -1,0 +1,7 @@
+{
+  "name": "com.workinsight.agent.bridge",
+  "description": "WorkInsight agent native messaging host",
+  "path": "/Applications/WorkInsight Agent.app/Contents/MacOS/workinsight-bridge",
+  "type": "stdio",
+  "allowed_origins": ["chrome-extension://mndlbhlbpeoikiccjfeicdgbhmlahgad/"]
+}

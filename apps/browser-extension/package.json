@@ -1,0 +1,16 @@
+{
+  "name": "workinsight-browser-extension",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node --test tests/*.test.js",
+    "build": "esbuild src/core/background.js --bundle --format=esm --outfile=dist/background.js"
+  },
+  "dependencies": {
+    "tldts": "^6.1.0"
+  },
+  "devDependencies": {
+    "esbuild": "^0.24.0"
+  }
+}

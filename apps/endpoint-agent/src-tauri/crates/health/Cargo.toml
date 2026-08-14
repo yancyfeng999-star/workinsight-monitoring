@@ -1,0 +1,12 @@
+[package]
+name = "health"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[dependencies]
+serde.workspace = true
+chrono.workspace = true
+agent-core = { path = "../agent-core" }
+local-store = { path = "../local-store" }

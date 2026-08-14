@@ -1,0 +1,32 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "collection-policy.schema.json",
+  "title": "CollectionPolicyV1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "policy_version", "collection_enabled", "window_title_enabled",
+    "idle_after_seconds", "blocked_apps", "blocked_domains",
+    "issued_at", "expires_at"
+  ],
+  "properties": {
+    "policy_version": { "type": "integer", "minimum": 1 },
+    "collection_enabled": { "type": "boolean" },
+    "window_title_enabled": { "type": "boolean" },
+    "idle_after_seconds": { "type": "integer", "minimum": 30, "maximum": 3600 },
+    "blocked_apps": {
+      "type": "array",
+      "items": { "type": "string", "maxLength": 128 }
+    },
+    "blocked_domains": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "maxLength": 253,
+        "pattern": "^(?!.*://)(?!.*[/?#:])(?!^\\d+\\.\\d+\\.\\d+\\.\\d+$)[a-z0-9]([a-z0-9-]*[a-z0-9])?(\\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)*$"
+      }
+    },
+    "issued_at": { "type": "string", "format": "date-time" },
+    "expires_at": { "type": "string", "format": "date-time" }
+  }
+}

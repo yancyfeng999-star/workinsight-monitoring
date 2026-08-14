@@ -1,0 +1,19 @@
+[package]
+name = "secret-store"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[dependencies]
+aes-gcm = "0.10"
+rand = "0.8"
+base64 = "0.22"
+zeroize = "1"
+thiserror.workspace = true
+
+[target.'cfg(target_os = "macos")'.dependencies]
+security-framework = "2"
+
+[target.'cfg(target_os = "windows")'.dependencies]
+windows = { version = "0.58", features = ["Win32_Foundation", "Win32_Security_Cryptography", "Win32_System_Memory"] }

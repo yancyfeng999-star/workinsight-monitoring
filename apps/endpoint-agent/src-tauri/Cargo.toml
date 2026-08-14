@@ -1,0 +1,84 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/agent-core",
+    "crates/collection-policy",
+    "crates/collector-macos",
+    "crates/collector-windows",
+    "crates/local-store",
+    "crates/segmenter",
+    "crates/browser-bridge",
+    "crates/autostart-supervisor",
+    "crates/device-identity",
+    "crates/uploader",
+    "crates/health",
+    "crates/agent-bin",
+    "crates/secret-store",
+    "crates/local-ipc",
+    "crates/policy-client",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.89"
+license = "proprietary"
+
+[workspace.dependencies]
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+thiserror = "2"
+chrono = { version = "0.4", features = ["serde"] }
+uuid = { version = "1", features = ["v7", "serde"] }
+rusqlite = { version = "0.32", features = ["bundled"] }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+url = "2"
+
+[package]
+name = "workinsight-agent"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[lib]
+name = "workinsight_agent_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = ["tray-icon", "image-png"] }
+tauri-plugin-opener = "2"
+serde.workspace = true
+serde_json.workspace = true
+chrono.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true
+tracing-appender = "0.2"
+fs2 = "0.4"
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
+tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
+agent-core = { path = "crates/agent-core" }
+local-store = { path = "crates/local-store" }
+secret-store = { path = "crates/secret-store" }
+local-ipc = { path = "crates/local-ipc" }
+policy-client = { path = "crates/policy-client" }
+device-identity = { path = "crates/device-identity" }
+collection-policy = { path = "crates/collection-policy" }
+segmenter = { path = "crates/segmenter" }
+health = { path = "crates/health" }
+autostart-supervisor = { path = "crates/autostart-supervisor" }
+uploader = { path = "crates/uploader" }
+
+[target.'cfg(target_os = "macos")'.dependencies]
+collector-macos = { path = "crates/collector-macos" }
+
+[target.'cfg(target_os = "windows")'.dependencies]
+collector-windows = { path = "crates/collector-windows" }
+
+[profile.release]
+lto = true
+strip = true

@@ -1,0 +1,80 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "activity-event.schema.json",
+  "title": "ActivityEventV1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version", "event_id", "org_id", "device_id", "subject_id",
+    "sequence_no", "source", "kind", "started_at", "ended_at",
+    "timezone", "privacy", "agent"
+  ],
+  "properties": {
+    "schema_version": { "const": 1 },
+    "event_id": { "type": "string", "minLength": 8, "maxLength": 64 },
+    "org_id": { "type": "string", "minLength": 1, "maxLength": 64 },
+    "device_id": { "type": "string", "minLength": 1, "maxLength": 64 },
+    "subject_id": { "type": "string", "minLength": 1, "maxLength": 64 },
+    "sequence_no": { "type": "integer", "minimum": 1 },
+    "source": { "enum": ["system", "browser"] },
+    "kind": { "enum": ["focus_segment", "state_change"] },
+    "started_at": { "type": "string", "format": "date-time" },
+    "ended_at": { "type": "string", "format": "date-time" },
+    "timezone": { "type": "string", "minLength": 1, "maxLength": 64 },
+    "privacy": { "const": "normal" },
+    "agent": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["version", "os"],
+      "properties": {
+        "version": { "type": "string", "minLength": 1, "maxLength": 32 },
+        "os": { "type": "string", "minLength": 1, "maxLength": 32 }
+      }
+    }
+  },
+  "allOf": [
+    {
+      "if": { "properties": { "kind": { "const": "focus_segment" } } },
+      "then": {
+        "required": ["activity"],
+        "properties": {
+          "activity": { "$ref": "#/$defs/focusActivity" }
+        }
+      },
+      "else": {
+        "required": ["state"],
+        "properties": {
+          "state": { "$ref": "#/$defs/stateObject" }
+        }
+      }
+    }
+  ],
+  "$defs": {
+    "focusActivity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["app_id", "app_name", "window_title", "browser", "registrable_domain", "url_path"],
+      "properties": {
+        "app_id": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "app_name": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "window_title": { "type": ["string", "null"], "maxLength": 256 },
+        "browser": { "type": ["string", "null"], "maxLength": 32 },
+        "registrable_domain": {
+          "type": ["string", "null"],
+          "maxLength": 253,
+          "pattern": "^(?!.*://)(?!.*[/?#:])(?!^\\d+\\.\\d+\\.\\d+\\.\\d+$)(?!^localhost$)[a-z0-9]([a-z0-9-]*[a-z0-9])?(\\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)*$"
+        },
+        "url_path": { "const": null }
+      }
+    },
+    "stateObject": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["presence", "started_at"],
+      "properties": {
+        "presence": { "enum": ["active", "idle", "locked", "unlocked", "sleeping", "awake"] },
+        "started_at": { "type": "string", "format": "date-time" }
+      }
+    }
+  }
+}

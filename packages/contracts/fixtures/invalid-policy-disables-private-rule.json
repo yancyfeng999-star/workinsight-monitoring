@@ -1,0 +1,12 @@
+{
+  "policy_version": 1,
+  "collection_enabled": true,
+  "window_title_enabled": false,
+  "idle_after_seconds": 300,
+  "blocked_apps": [],
+  "blocked_domains": [],
+  "private_mode_always_dropped": false,
+  "full_url_allowed": true,
+  "issued_at": "2026-08-10T00:00:00.000Z",
+  "expires_at": "2026-08-17T00:00:00.000Z"
+}

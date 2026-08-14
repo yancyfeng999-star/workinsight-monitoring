@@ -1,0 +1,20 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "health-sample.schema.json",
+  "title": "HealthSampleV1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "device_id", "agent_version", "os", "collected_at",
+    "queue_depth", "permissions_ok", "autostart_enabled"
+  ],
+  "properties": {
+    "device_id": { "type": "string", "minLength": 1, "maxLength": 64 },
+    "agent_version": { "type": "string", "minLength": 1, "maxLength": 32 },
+    "os": { "type": "string", "minLength": 1, "maxLength": 32 },
+    "collected_at": { "type": "string", "format": "date-time" },
+    "queue_depth": { "type": "integer", "minimum": 0 },
+    "permissions_ok": { "type": "boolean" },
+    "autostart_enabled": { "type": "boolean" }
+  }
+}

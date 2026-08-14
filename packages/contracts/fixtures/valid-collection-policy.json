@@ -1,0 +1,10 @@
+{
+  "policy_version": 1,
+  "collection_enabled": true,
+  "window_title_enabled": false,
+  "idle_after_seconds": 300,
+  "blocked_apps": ["com.1password.1password"],
+  "blocked_domains": ["bank.example.com", "mail.personal.example"],
+  "issued_at": "2026-08-10T00:00:00.000Z",
+  "expires_at": "2026-08-17T00:00:00.000Z"
+}

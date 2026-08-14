@@ -1,0 +1,39 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "batch-ack.schema.json",
+  "title": "BatchAckV1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["accepted", "rejected", "server_time"],
+  "properties": {
+    "accepted": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["sequence_no", "event_id"],
+        "properties": {
+          "sequence_no": { "type": "integer", "minimum": 1 },
+          "event_id": { "type": "string", "minLength": 8, "maxLength": 64 }
+        }
+      }
+    },
+    "rejected": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["sequence_no", "event_id", "code", "retryable"],
+        "properties": {
+          "sequence_no": { "type": "integer", "minimum": 1 },
+          "event_id": { "type": "string", "minLength": 8, "maxLength": 64 },
+          "code": {
+            "enum": ["invalid_schema", "identity_mismatch", "sequence_conflict", "device_revoked"]
+          },
+          "retryable": { "type": "boolean" }
+        }
+      }
+    },
+    "server_time": { "type": "string", "format": "date-time" }
+  }
+}

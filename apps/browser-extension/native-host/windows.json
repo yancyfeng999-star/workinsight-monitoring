@@ -1,0 +1,7 @@
+{
+  "name": "com.workinsight.agent.bridge",
+  "description": "WorkInsight agent native messaging host",
+  "path": "C:\\Program Files\\WorkInsight Agent\\workinsight-bridge.exe",
+  "type": "stdio",
+  "allowed_origins": ["chrome-extension://mndlbhlbpeoikiccjfeicdgbhmlahgad/"]
+}

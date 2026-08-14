@@ -1,0 +1,17 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "batch.schema.json",
+  "title": "ActivityBatchV1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["org_id", "subject_id", "events"],
+  "properties": {
+    "org_id": { "type": "string", "minLength": 1, "maxLength": 64 },
+    "subject_id": { "type": "string", "minLength": 1, "maxLength": 64 },
+    "events": {
+      "type": "array",
+      "maxItems": 500,
+      "items": { "$ref": "activity-event.schema.json" }
+    }
+  }
+}

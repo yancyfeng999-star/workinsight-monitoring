@@ -1,0 +1,19 @@
+{
+  "schema_version": 1,
+  "event_id": "evt_fixture_state_0001",
+  "org_id": "org_fixture",
+  "device_id": "dev_fixture_001",
+  "subject_id": "sub_fixture_001",
+  "sequence_no": 3,
+  "source": "system",
+  "kind": "state_change",
+  "started_at": "2026-08-10T01:40:00.000Z",
+  "ended_at": "2026-08-10T01:40:00.500Z",
+  "timezone": "Asia/Shanghai",
+  "state": {
+    "presence": "locked",
+    "started_at": "2026-08-10T01:40:00.000Z"
+  },
+  "privacy": "normal",
+  "agent": { "version": "0.1.0", "os": "macos" }
+}
