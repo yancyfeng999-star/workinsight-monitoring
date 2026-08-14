@@ -14,15 +14,20 @@
    表单输入、Cookie。
 5. **不绕过权限**：不伪装系统进程、不绕过 TCC/UAC、不提供远程 Shell/脚本/任意命令。
 
+## 本地构建边界
+
+- **默认禁止构建或打包 Mac App**：不得运行 `cargo tauri build`、生成 `.app`/`.dmg`/`.pkg`，也不得将应用复制或安装到 `/Applications`、桌面或其他用户可见的应用目录。
+- 只有用户在当前任务中明确授权发布构建、签名、公证或安装时，才可以执行对应操作；授权前只允许源码检查、测试和类型检查。
+- 即使获得构建授权，也不得自动启动应用或重复安装；完成后必须先报告产物路径，再等待后续操作指令。
+
 ## 常规命令
 
 ```text
-# Agent（Rust 工作区，必须在 apps/endpoint-agent/src-tauri 目录内执行）
+# Agent（Rust 工作区，必须在 apps/endpoint-agent/src-tauri 目录内执行；默认不构建 App）
 cd apps/endpoint-agent/src-tauri
 cargo fmt --all -- --check
 cargo clippy --workspace --all-targets --locked -- -D warnings
 cargo test --workspace --locked
-cargo build --workspace --locked
 
 # 浏览器扩展（npm）
 cd apps/browser-extension
