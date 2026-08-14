@@ -33,7 +33,7 @@ function validEvent(seq: number, started: string, ended: string) {
     timezone: "UTC",
     activity: { app_id: "com.apple.Xcode", app_name: "Xcode", window_title: null, browser: null, registrable_domain: null, url_path: null },
     privacy: "normal",
-    agent: { version: "0.1.0", os: "macos" },
+    agent: { version: "0.1.1", os: "macos" },
   };
 }
 

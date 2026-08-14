@@ -28,7 +28,7 @@ fn setup(
     let store = LocalStore::open(dir.join("queue.db").to_str().unwrap()).unwrap();
     let identity = DeviceIdentity::load_or_create(&dir.join("device_id")).unwrap();
     let agent = AgentInfo {
-        version: "0.1.0".into(),
+        version: "0.1.1".into(),
         os: "macos".into(),
     };
     let policy = CollectionPolicy::default();
@@ -90,7 +90,7 @@ fn sequence_survives_ack_and_restart() {
     let mut engine2 = AgentEngine::new(
         store2,
         AgentInfo {
-            version: "0.1.0".into(),
+            version: "0.1.1".into(),
             os: "macos".into(),
         },
         CollectionPolicy::default(),

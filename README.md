@@ -62,6 +62,8 @@ assets/               品牌与平台图标资源
 
 ## 当前状态
 
+当前源码版本：`0.1.1`。
+
 源码已经公开，但“代码存在”“组件测试通过”“可安装发布”“真实运行验证”是不同状态。当前交付证据以 [`docs/evidence/delivery-status.json`](docs/evidence/delivery-status.json) 为准。
 
 | 范围 | 当前说明 |

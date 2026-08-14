@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "WorkInsight Browser Watcher",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Reports the active tab's registrable domain to the local WorkInsight agent via Native Messaging. Private/incognito contexts are never recorded.",
   "permissions": ["tabs", "nativeMessaging", "storage"],
   "background": {

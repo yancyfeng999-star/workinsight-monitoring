@@ -24,7 +24,7 @@ function base() {
       url_path: null,
     },
     privacy: "normal",
-    agent: { version: "0.1.0", os: "macos" },
+    agent: { version: "0.1.1", os: "macos" },
   };
 }
 

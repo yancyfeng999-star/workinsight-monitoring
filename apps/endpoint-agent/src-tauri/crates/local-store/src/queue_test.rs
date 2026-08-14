@@ -26,7 +26,7 @@ fn sample_event(seq: u64, name: &str) -> Event {
         },
         privacy: Privacy::Normal,
         agent: AgentInfo {
-            version: "0.1.0".into(),
+            version: "0.1.1".into(),
             os: "macos".into(),
         },
     }

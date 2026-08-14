@@ -31,7 +31,7 @@
     "private_mode": false
   },
   "agent": {
-    "version": "0.1.0",
+    "version": "0.1.1",
     "os": "macos"
   }
 }
