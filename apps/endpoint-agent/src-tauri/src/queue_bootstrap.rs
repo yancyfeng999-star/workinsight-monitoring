@@ -1,6 +1,9 @@
 use std::path::Path;
 
 use local_store::{LocalStore, StoreError};
+use secret_store::SecretStore;
+
+pub const SECRET_KEY_QUEUE: &str = "queue_encryption_key";
 
 /// Fail-closed error for opening an enrolled product queue.
 /// Display output must never include key material.
@@ -34,6 +37,27 @@ impl From<StoreError> for StartupError {
     fn from(err: StoreError) -> Self {
         Self::Store(err)
     }
+}
+
+/// Resolve the queue encryption key from SecretStore.
+///
+/// An already-enrolled agent must fail closed when no valid 32-byte key is
+/// present. First-run enroll (no existing identity / first persist) may mint
+/// and persist a new key.
+pub fn resolve_queue_key(secrets: &mut dyn SecretStore, enrolled: bool) -> Option<[u8; 32]> {
+    if let Ok(bytes) = secrets.get(SECRET_KEY_QUEUE) {
+        if bytes.len() == 32 {
+            let mut key = [0u8; 32];
+            key.copy_from_slice(&bytes);
+            return Some(key);
+        }
+    }
+    if enrolled {
+        return None;
+    }
+    let key = secret_store::random_key();
+    secrets.put(SECRET_KEY_QUEUE, &key).ok()?;
+    Some(key)
 }
 
 /// Open the enrolled product queue. Never uses plaintext queue mode.

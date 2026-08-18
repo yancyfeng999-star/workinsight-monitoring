@@ -6,6 +6,7 @@ import { requireAdmin } from "../auth/admin-session.js";
 import { hashToken } from "../auth/password.js";
 import type { PolicySigningKey } from "../policy/sign-policy.js";
 import { signPolicy } from "../policy/sign-policy.js";
+import { ALLOWED_POLICY_KEYS, validateCollectionFields } from "../policy/collection-fields.js";
 import type {
   AuditEntry,
   CreatedEnrollment,
@@ -35,21 +36,6 @@ const READ_AUDIT: AdminRole[] = ["company_admin", "internal_auditor"];
 const READ_INSIGHT: AdminRole[] = ["company_admin"];
 const READ_HEALTH: AdminRole[] = ["company_admin", "system_operator"];
 
-const ALLOWED_POLICY_KEYS = [
-  "policy_version",
-  "collection_enabled",
-  "window_title_enabled",
-  "idle_after_seconds",
-  "blocked_apps",
-  "blocked_domains",
-  "issued_at",
-  "expires_at",
-] as const;
-
-const FORBIDDEN_POLICY_KEY = /screenshot|recording|keylog|clipboard|cookie|webcam|microphone|keystroke/i;
-const DOMAIN_RE =
-  /^(?!.*:\/\/)(?!.*[/?#:])(?!^\d+\.\d+\.\d+\.\d+$)[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)*$/;
-
 const DEFAULT_POLICY = {
   collection_enabled: true,
   window_title_enabled: false,
@@ -77,7 +63,7 @@ const DEFAULT_POLICY = {
   ],
 };
 
-const AUDIT_ORG_SCOPE = `(
+export const AUDIT_ORG_SCOPE = `(
   EXISTS (
     SELECT 1 FROM admin_users u
     WHERE a.actor = 'admin:' || u.username AND u.org_id = $1
@@ -855,37 +841,7 @@ function parsePolicyContent(
   if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
     return { ok: false, error: "content must be a JSON object" };
   }
-  const value = parsed as Record<string, unknown>;
-  for (const key of Object.keys(value)) {
-    if (FORBIDDEN_POLICY_KEY.test(key)) return { ok: false, error: "forbidden collection field" };
-    if (!ALLOWED_POLICY_KEYS.includes(key as (typeof ALLOWED_POLICY_KEYS)[number])) {
-      return { ok: false, error: `unknown policy field ${key}` };
-    }
-  }
-  if ("collection_enabled" in value && typeof value.collection_enabled !== "boolean") {
-    return { ok: false, error: "collection_enabled must be a boolean" };
-  }
-  if ("window_title_enabled" in value && typeof value.window_title_enabled !== "boolean") {
-    return { ok: false, error: "window_title_enabled must be a boolean" };
-  }
-  if ("idle_after_seconds" in value) {
-    const idle = value.idle_after_seconds;
-    if (!Number.isInteger(idle) || Number(idle) < 30 || Number(idle) > 3600) {
-      return { ok: false, error: "idle_after_seconds must be an integer from 30 to 3600" };
-    }
-  }
-  if ("blocked_apps" in value && !isStringArray(value.blocked_apps)) {
-    return { ok: false, error: "blocked_apps must be an array of strings" };
-  }
-  if ("blocked_domains" in value) {
-    if (!isStringArray(value.blocked_domains)) {
-      return { ok: false, error: "blocked_domains must be an array of strings" };
-    }
-    for (const domain of value.blocked_domains) {
-      if (!DOMAIN_RE.test(domain)) return { ok: false, error: `invalid blocked domain ${domain}` };
-    }
-  }
-  return { ok: true, value };
+  return validateCollectionFields(parsed as Record<string, unknown>);
 }
 
 function enrollmentStatus(
@@ -920,8 +876,4 @@ function parseTime(value: unknown): string | null {
   if (typeof value !== "string" || value.length === 0) return null;
   const ms = Date.parse(value);
   return Number.isNaN(ms) ? null : new Date(ms).toISOString();
-}
-
-function isStringArray(value: unknown): value is string[] {
-  return Array.isArray(value) && value.every((item) => typeof item === "string");
 }

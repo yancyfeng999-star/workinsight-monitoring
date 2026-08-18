@@ -1,7 +1,11 @@
 use std::path::{Path, PathBuf};
 
 use agent_core::contract::{Activity, AgentInfo, Event, EventPayload, Privacy, Source};
-use workinsight_agent_lib::queue_bootstrap::{open_product_queue, StartupError};
+use secret_store::MemorySecretStore;
+use workinsight_agent_lib::enrollment::{save_config, EnrollmentIdentity};
+use workinsight_agent_lib::queue_bootstrap::{
+    open_product_queue, resolve_queue_key, StartupError, SECRET_KEY_QUEUE,
+};
 
 const PLAINTEXT_MARKER: &str = "plaintext_queue_marker_task6";
 const SECRET_KEY_LITERAL: &[u8; 32] = b"SECRET_QUEUE_KEY_DO_NOT_LEAK!!!!";
@@ -181,4 +185,51 @@ fn enrolled_product_source_has_no_plain_fallback() {
         !stripped.contains("LocalStore::open(") && !stripped.contains("LocalStore::open_plain"),
         "product queue opener must not call plaintext LocalStore::open"
     );
+}
+
+#[test]
+fn enrolled_missing_queue_key_fails_closed_without_minting() {
+    let dir = tmp("enrolled-missing-key");
+    save_config(
+        &dir,
+        &EnrollmentIdentity {
+            org_id: "org_test".into(),
+            subject_id: "sub_test".into(),
+            device_id: "dev_test".into(),
+            api_base_url: "https://monitor.example.com".into(),
+            policy_version: 1,
+            enrolled_at: "2026-08-10T00:00:00Z".into(),
+        },
+    )
+    .unwrap();
+    let enrolled = workinsight_agent_lib::enrollment::load_config(&dir).is_some();
+    assert!(enrolled, "fixture must look enrolled");
+
+    let mut store = MemorySecretStore::new();
+    assert!(
+        resolve_queue_key(&mut store, enrolled).is_none(),
+        "enrolled agent with no 32-byte key must not mint"
+    );
+    assert!(
+        store.get(SECRET_KEY_QUEUE).is_err(),
+        "fail-closed path must not persist a synthesized key"
+    );
+
+    store.put(SECRET_KEY_QUEUE, &[1u8; 8]).unwrap();
+    assert!(resolve_queue_key(&mut store, true).is_none());
+    assert_eq!(
+        store.get(SECRET_KEY_QUEUE).unwrap().len(),
+        8,
+        "invalid stored key must not be replaced when enrolled"
+    );
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn first_run_mints_and_persists_queue_key() {
+    let mut store = MemorySecretStore::new();
+    let key = resolve_queue_key(&mut store, false).expect("first persist may mint");
+    assert_eq!(key.len(), 32);
+    assert_eq!(store.get(SECRET_KEY_QUEUE).unwrap(), key);
+    assert_eq!(resolve_queue_key(&mut store, true).unwrap(), key);
 }

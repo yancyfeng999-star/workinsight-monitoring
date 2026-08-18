@@ -5,6 +5,7 @@ import { requireAdmin } from "../auth/admin-session.js";
 import { hashToken } from "../auth/password.js";
 import { signPolicy, verifyPolicy, generatePolicyKeyPair } from "../policy/sign-policy.js";
 import type { PolicySigningKey } from "../policy/sign-policy.js";
+import { validateCollectionFields } from "../policy/collection-fields.js";
 
 const DEFAULT_POLICY = {
   policy_version: 1,
@@ -44,7 +45,7 @@ export function registerPoliciesRoutes(
     if (!orgRow) return reply.code(401).send({ error: "unauthorized" });
 
     const polRes = await pool.query(
-      `SELECT payload, signature FROM collection_policies WHERE org_id = $1 ORDER BY policy_version DESC LIMIT 1`,
+      `SELECT payload, signature, signing_key_fingerprint FROM collection_policies WHERE org_id = $1 ORDER BY policy_version DESC LIMIT 1`,
       [orgRow.org_id]
     );
     if (polRes.rowCount === 0) {
@@ -87,12 +88,19 @@ export function registerPoliciesRoutes(
     if (!admin) return;
     const body = req.body;
     if (!body || typeof body !== "object") return reply.code(400).send({ error: "policy required" });
+    const parsed = validateCollectionFields(body);
+    if (!parsed.ok) return reply.code(400).send({ error: parsed.error });
     const polRes = await pool.query(
       `SELECT COALESCE(MAX(policy_version), 0) + 1 AS next FROM collection_policies WHERE org_id = $1`,
       [admin.org_id]
     );
     const nextVersion = polRes.rows[0].next;
-    const payload = { ...DEFAULT_POLICY, ...body, policy_version: nextVersion, issued_at: new Date().toISOString() };
+    const payload = {
+      ...DEFAULT_POLICY,
+      ...parsed.value,
+      policy_version: nextVersion,
+      issued_at: new Date().toISOString(),
+    };
     const sig = signPolicy(payload, key.privateKeyPem);
     await pool.query(
       `INSERT INTO collection_policies (policy_version, org_id, payload, signature, signing_key_fingerprint)

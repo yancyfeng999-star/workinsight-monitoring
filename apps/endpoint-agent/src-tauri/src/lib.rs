@@ -26,8 +26,6 @@ const UPLOAD_INTERVAL: Duration = Duration::from_secs(30);
 const POLICY_INTERVAL: Duration = Duration::from_secs(300);
 const HEALTH_INTERVAL: Duration = Duration::from_secs(60);
 #[allow(dead_code)]
-const SECRET_KEY_QUEUE: &str = "queue_encryption_key";
-#[allow(dead_code)]
 const DEBUG_QUEUE_KEY: [u8; 32] = *b"debug-queue-key-0000000000000000";
 const DEFAULT_BATCH_SIZE: usize = 100;
 
@@ -253,24 +251,6 @@ fn setup_tray(app: &tauri::AppHandle, is_enrolled: bool) -> tauri::Result<()> {
     Ok(())
 }
 
-/// Resolve the queue encryption key: read from SecretStore, or generate and
-/// persist a new 32-byte key. Returns None only if SecretStore is completely
-/// unavailable (should not happen in release builds).
-#[allow(dead_code)]
-fn resolve_queue_key(secrets: &mut dyn SecretStore) -> Option<[u8; 32]> {
-    if let Ok(bytes) = secrets.get(SECRET_KEY_QUEUE) {
-        if bytes.len() == 32 {
-            let mut key = [0u8; 32];
-            key.copy_from_slice(&bytes);
-            return Some(key);
-        }
-    }
-    // Generate new key and persist
-    let key = secret_store::random_key();
-    let _ = secrets.put(SECRET_KEY_QUEUE, &key);
-    Some(key)
-}
-
 /// Read the device token from SecretStore for authenticated API calls.
 #[allow(dead_code)]
 fn read_device_token(secrets: &dyn SecretStore) -> Option<String> {
@@ -307,12 +287,12 @@ fn collector_loop(
         {
             let mut store =
                 secret_store::PlatformSecretStore::new("com.workinsight.agent", "secrets");
-            resolve_queue_key(&mut store)
+            crate::queue_bootstrap::resolve_queue_key(&mut store, config.is_some())
         }
         #[cfg(all(target_os = "windows", not(debug_assertions)))]
         {
             let mut store = secret_store::PlatformSecretStore;
-            resolve_queue_key(&mut store)
+            crate::queue_bootstrap::resolve_queue_key(&mut store, config.is_some())
         }
         #[cfg(debug_assertions)]
         {

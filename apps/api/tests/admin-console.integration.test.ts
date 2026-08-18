@@ -365,6 +365,7 @@ test("org_a admin cannot see org_b rows on any console endpoint", async () => {
         "/v1/admin/enrollment",
         "/v1/admin/policies",
         "/v1/admin/audit",
+        "/v1/admin/audit-logs",
         "/v1/admin/insight",
         "/v1/admin/system/health",
         "/v1/admin/subjects/sub_a",
@@ -792,6 +793,8 @@ test("signed collection policy sent to devices does not include rollout_percent"
       const devicePolicy = asRecord(deviceBody.policy);
       assert.equal(Object.hasOwn(devicePolicy, "rollout_percent"), false);
       assert.equal(Object.hasOwn(devicePolicy, "collection"), false);
+      assert.equal(typeof deviceBody.signing_key_fingerprint, "string");
+      assert.ok(String(deviceBody.signing_key_fingerprint).length > 0);
 
       const listed = await api(ctx, "/v1/admin/policies", { token });
       assert.equal(asRecord(asArray(listed.body)[0]).rolloutPercent, 35);
@@ -839,6 +842,7 @@ test("flat device-policy payload keeps the signed blob including rollout_percent
         const policy = asRecord(body.policy);
         assert.equal(policy.rollout_percent, 40);
         assert.equal(typeof body.signature, "string");
+        assert.equal(body.signing_key_fingerprint, key.fingerprint);
         assert.equal(verifyPolicy(body.policy, String(body.signature), key.publicKeyPem), true);
         assert.equal(verifyPolicy(body.policy, String(body.signature), String(body.signing_public_key)), true);
       },
@@ -1038,6 +1042,89 @@ test("system health queries live state and does not hard-code worker ok", async 
       const freshWorker = asRecord(asRecord(fresh.body).worker);
       assert.equal(freshWorker.status, "ok");
       assert.equal(typeof freshWorker.lastRun, "string");
+    });
+  });
+});
+
+test("legacy GET /v1/admin/audit-logs is org-scoped and hides admin:admin_b", async () => {
+  await withTestSchema(TEST_DB_URL, async (schema) => {
+    await runInSchema(schema, async (ctx) => {
+      await seedIdentities(ctx.app.pool);
+      await seedFacts(ctx.app.pool);
+      const token = await bearer(ctx, "user_admin_a");
+      const result = await api(ctx, "/v1/admin/audit-logs", { token });
+      assert.equal(result.status, 200);
+      const payload = asRecord(result.body);
+      const logs = asArray(payload.logs);
+      assert.ok(logs.length >= 1);
+      assert.equal(
+        logs.some((row) => asRecord(row).actor === "admin:admin_b"),
+        false
+      );
+      assert.equal(result.raw.includes("admin:admin_b"), false);
+      assert.equal(result.raw.includes("sub_bravo"), false);
+      assert.equal(result.raw.includes("req_b"), false);
+    });
+  });
+});
+
+test("legacy POST /v1/policies rejects screenshot and keylog fields", async () => {
+  await withTestSchema(TEST_DB_URL, async (schema) => {
+    await runInSchema(schema, async (ctx) => {
+      await seedIdentities(ctx.app.pool);
+      const token = await bearer(ctx, "user_admin_a");
+
+      const screenshot = await api(ctx, "/v1/policies", {
+        method: "POST",
+        token,
+        body: JSON.stringify({ screenshotInterval: 300 }),
+      });
+      assert.equal(screenshot.status, 400);
+      const keylog = await api(ctx, "/v1/policies", {
+        method: "POST",
+        token,
+        body: JSON.stringify({ collection_enabled: true, keylogging: true }),
+      });
+      assert.equal(keylog.status, 400);
+      const stored = await ctx.app.pool.query(
+        `SELECT payload FROM collection_policies WHERE org_id = 'org_a'`
+      );
+      assert.equal(stored.rows.length, 0);
+      assert.equal(JSON.stringify(stored.rows).includes("screenshot"), false);
+      assert.equal(JSON.stringify(stored.rows).includes("keylog"), false);
+    });
+  });
+});
+
+test("POST /v1/admin/subjects cannot mutate another org's subject", async () => {
+  await withTestSchema(TEST_DB_URL, async (schema) => {
+    await runInSchema(schema, async (ctx) => {
+      await seedIdentities(ctx.app.pool);
+      const token = await bearer(ctx, "user_admin_a");
+      const hijack = await api(ctx, "/v1/admin/subjects", {
+        method: "POST",
+        token,
+        body: JSON.stringify({ subject_id: "sub_bravo", display_name: "Hijacked" }),
+      });
+      assert.equal(hijack.status, 409);
+      const foreign = await ctx.app.pool.query(
+        `SELECT org_id, display_name FROM subjects WHERE subject_id = 'sub_bravo'`
+      );
+      assert.equal(foreign.rows.length, 1);
+      assert.equal(foreign.rows[0].org_id, "org_b");
+      assert.equal(foreign.rows[0].display_name, "Bravo");
+
+      const renamed = await api(ctx, "/v1/admin/subjects", {
+        method: "POST",
+        token,
+        body: JSON.stringify({ subject_id: "sub_a", display_name: "Alice Updated" }),
+      });
+      assert.equal(renamed.status, 201);
+      const own = await ctx.app.pool.query(
+        `SELECT org_id, display_name FROM subjects WHERE subject_id = 'sub_a'`
+      );
+      assert.equal(own.rows[0].org_id, "org_a");
+      assert.equal(own.rows[0].display_name, "Alice Updated");
     });
   });
 });

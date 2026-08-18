@@ -73,6 +73,8 @@ pub async fn enroll(
     secrets
         .put("device_token", device_token.as_bytes())
         .map_err(|e| format!("secret store unavailable: {e}"))?;
+    // First persist may mint a queue key; later enrolled starts fail closed if it is missing.
+    let _ = crate::queue_bootstrap::resolve_queue_key(secrets.as_mut(), false);
 
     let identity = EnrollmentIdentity {
         org_id,
