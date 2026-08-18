@@ -124,6 +124,24 @@ npm run typecheck
 python3 -m unittest discover -s tools/release-verifier -p 'test_*.py'
 ```
 
+### 公共仓库质量门禁（不打包 App）
+
+[`.github/workflows/quality.yml`](.github/workflows/quality.yml) 在 **pull request** 与向 **`main` 的 push** 上运行源码级质量门禁。权限仅为 `contents: read`，不读取或注入仓库 secrets。
+
+独立 job 覆盖：
+
+| Job | 内容 |
+| --- | --- |
+| `rust-agent` | `cargo fmt` / Clippy / workspace tests（**不**运行 `cargo tauri build`） |
+| `api` | `npm ci`、PostgreSQL 16 服务上的 `workinsight_test` 迁移、单元与集成测试、typecheck |
+| `worker` | `npm ci`、test、typecheck |
+| `web-console` | `npm ci`、test、typecheck |
+| `browser-extension` | `npm ci`、test、扩展资源 `build`（不是 Mac App） |
+| `endpoint-ui` | `npm ci`、test、typecheck |
+| `contracts-release-verifier` | 发布校验器单测 + 契约 JSON Schema/fixtures 可解析检查 |
+
+该 workflow **不**执行 Tauri 打包、签名、公证、GitHub Release、部署或 App 安装。在 GitHub 尚未实际跑过该 workflow 之前，本地等价命令通过只能记为 `local_equivalent`，不能记为 `ci_passed`。
+
 ### Mac App 构建边界
 
 默认禁止运行 `cargo tauri build`、生成 `.app` / `.dmg` / `.pkg`、复制到 `/Applications`、启动或重复安装应用。只有用户在当前任务中明确授权发布构建、签名、公证或安装时，才可以执行对应操作；详见 [`AGENTS.md`](AGENTS.md)。
