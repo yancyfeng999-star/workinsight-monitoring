@@ -132,7 +132,7 @@ python3 -m unittest discover -s tools/release-verifier -p 'test_*.py'
 
 | Job | 内容 |
 | --- | --- |
-| `rust-agent` | `cargo fmt` / Clippy / workspace tests（**不**运行 `cargo tauri build`） |
+| `rust-agent` | 在 `macos-latest` 上跑 `cargo fmt` / Clippy / workspace tests（**不**运行 `cargo tauri build`） |
 | `api` | `npm ci`、PostgreSQL 16 服务上的 `workinsight_test` 迁移、单元与集成测试、typecheck |
 | `worker` | `npm ci`、test、typecheck |
 | `web-console` | `npm ci`、test、typecheck |

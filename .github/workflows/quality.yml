@@ -19,7 +19,9 @@ concurrency:
 jobs:
   rust-agent:
     name: rust-agent
-    runs-on: ubuntu-latest
+    # macOS: Tauri 2 / workinsight-agent needs native WebKit; avoid Linux dep install.
+    # Still source-only: fmt / clippy / test — never cargo tauri build.
+    runs-on: macos-latest
     defaults:
       run:
         working-directory: apps/endpoint-agent/src-tauri
