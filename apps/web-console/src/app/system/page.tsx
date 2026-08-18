@@ -1,44 +1,37 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { QueryStatus } from "../../components/query-state";
+import { formatDateTime } from "../../lib/format";
+import { apiFetch, type SystemHealth } from "../../lib/api";
+import { useAdminQuery } from "../../lib/use-admin-query";
 
-interface SystemHealth {
-  api: { status: string; latencyMs: number };
-  worker: { status: string; lastRun: string };
-  database: { connected: boolean; latencyMs: number };
-  queues: { name: string; depth: number }[];
-}
+const API_LABEL: Record<SystemHealth["api"]["status"], string> = {
+  ok: "正常",
+  degraded: "降级",
+};
+
+const WORKER_LABEL: Record<SystemHealth["worker"]["status"], string> = {
+  ok: "正常",
+  stale: "过期",
+  error: "异常",
+};
 
 export default function SystemPage() {
-  const [health, setHealth] = useState<SystemHealth | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const { data, loading, error, reload } = useAdminQuery<SystemHealth>("/v1/admin/system/health", apiFetch);
 
-  function fetchHealth() {
-    setLoading(true);
-    fetch("/api/v1/admin/system/health")
-      .then((r) => {
-        if (!r.ok) throw new Error(`HTTP ${r.status}`);
-        return r.json();
-      })
-      .then(setHealth)
-      .catch((e) => setError(e.message))
-      .finally(() => setLoading(false));
-  }
+  return (
+    <QueryStatus loading={loading} error={error} onRetry={reload}>
+      {data ? <SystemView health={data} onRefresh={reload} /> : <div className="page empty">请先确认 API 与数据库可用</div>}
+    </QueryStatus>
+  );
+}
 
-  useEffect(() => {
-    fetchHealth();
-  }, []);
-
-  if (loading) return <div className="page loading">加载中...</div>;
-  if (error) return <div className="page error-box">加载失败: {error}</div>;
-  if (!health) return <div className="page empty">暂无系统数据</div>;
-
+function SystemView({ health, onRefresh }: { health: SystemHealth; onRefresh: () => void }) {
   return (
     <div className="page">
       <div className="page-header">
         <h1 className="page-title">系统状态</h1>
-        <button className="btn btn-ghost" onClick={fetchHealth}>
+        <button type="button" className="btn btn-ghost" onClick={onRefresh}>
           刷新
         </button>
       </div>
@@ -47,8 +40,8 @@ export default function SystemPage() {
         <div className="card">
           <div className="card-title">API 服务</div>
           <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 8 }}>
-            <span className={`status-dot ${health.api.status === "ok" ? "ok" : "error"}`} />
-            <span style={{ fontWeight: 600 }}>{health.api.status === "ok" ? "正常" : "异常"}</span>
+            <span className={`status-dot ${health.api.status === "ok" ? "ok" : "degraded"}`} />
+            <span style={{ fontWeight: 600 }}>{API_LABEL[health.api.status]}</span>
           </div>
           <div style={{ fontSize: "0.8rem", color: "var(--text-secondary)", marginTop: 4 }}>
             延迟: {health.api.latencyMs}ms
@@ -58,11 +51,15 @@ export default function SystemPage() {
         <div className="card">
           <div className="card-title">Worker 服务</div>
           <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 8 }}>
-            <span className={`status-dot ${health.worker.status === "ok" ? "ok" : "error"}`} />
-            <span style={{ fontWeight: 600 }}>{health.worker.status === "ok" ? "正常" : "异常"}</span>
+            <span
+              className={`status-dot ${
+                health.worker.status === "ok" ? "ok" : health.worker.status === "stale" ? "degraded" : "error"
+              }`}
+            />
+            <span style={{ fontWeight: 600 }}>{WORKER_LABEL[health.worker.status]}</span>
           </div>
           <div style={{ fontSize: "0.8rem", color: "var(--text-secondary)", marginTop: 4 }}>
-            最近运行: {new Date(health.worker.lastRun).toLocaleString("zh-CN")}
+            最近运行: {formatDateTime(health.worker.lastRun, "从未运行")}
           </div>
         </div>
 
@@ -70,9 +67,7 @@ export default function SystemPage() {
           <div className="card-title">数据库</div>
           <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 8 }}>
             <span className={`status-dot ${health.database.connected ? "connected" : "error"}`} />
-            <span style={{ fontWeight: 600 }}>
-              {health.database.connected ? "已连接" : "未连接"}
-            </span>
+            <span style={{ fontWeight: 600 }}>{health.database.connected ? "已连接" : "未连接"}</span>
           </div>
           <div style={{ fontSize: "0.8rem", color: "var(--text-secondary)", marginTop: 4 }}>
             延迟: {health.database.latencyMs}ms
@@ -83,7 +78,7 @@ export default function SystemPage() {
       <div className="card">
         <h2 style={{ fontSize: "1rem", fontWeight: 600, marginBottom: 12 }}>队列状态</h2>
         {health.queues.length === 0 ? (
-          <div className="empty">暂无队列</div>
+          <div className="empty">暂无队列数据。请先注册设备并产生健康上报</div>
         ) : (
           <div className="table-wrap">
             <table>
@@ -95,17 +90,17 @@ export default function SystemPage() {
                 </tr>
               </thead>
               <tbody>
-                {health.queues.map((q) => (
-                  <tr key={q.name}>
-                    <td className="mono">{q.name}</td>
-                    <td style={{ textAlign: "right" }}>{q.depth}</td>
+                {health.queues.map((queue) => (
+                  <tr key={queue.name}>
+                    <td className="mono">{queue.name}</td>
+                    <td style={{ textAlign: "right" }}>{queue.depth}</td>
                     <td style={{ textAlign: "center" }}>
                       <span
                         className={`badge ${
-                          q.depth === 0 ? "badge-ok" : q.depth < 100 ? "badge-warning" : "badge-danger"
+                          queue.depth === 0 ? "badge-ok" : queue.depth < 100 ? "badge-warning" : "badge-danger"
                         }`}
                       >
-                        {q.depth === 0 ? "空闲" : q.depth < 100 ? "正常" : "积压"}
+                        {queue.depth === 0 ? "空闲" : queue.depth < 100 ? "正常" : "积压"}
                       </span>
                     </td>
                   </tr>

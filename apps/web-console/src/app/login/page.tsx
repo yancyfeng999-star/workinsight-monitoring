@@ -2,6 +2,7 @@
 
 import { FormEvent, useState } from "react";
 import { useRouter } from "next/navigation";
+import { apiPost } from "../../lib/api";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -16,20 +17,7 @@ export default function LoginPage() {
     setLoading(true);
 
     try {
-      const res = await fetch("/api/v1/admin/login", {
-        method: "POST",
-        credentials: "same-origin",
-        cache: "no-store",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ username, password }),
-      });
-
-      if (!res.ok) {
-        const body = await res.text();
-        throw new Error(body || "登录失败");
-      }
-
-      await res.json().catch(() => null);
+      await apiPost("/v1/admin/login", { username, password });
       router.push("/");
     } catch (err) {
       setError(err instanceof Error ? err.message : "登录失败");

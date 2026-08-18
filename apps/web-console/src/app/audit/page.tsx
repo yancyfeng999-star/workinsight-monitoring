@@ -1,43 +1,23 @@
 "use client";
 
-import { useEffect, useState } from "react";
-
-interface AuditEntry {
-  id: string;
-  actor: string;
-  action: string;
-  target: string;
-  requestId: string;
-  ts: string;
-}
+import { useMemo, useState } from "react";
+import { EmptyHint, QueryStatus } from "../../components/query-state";
+import { formatDateTime } from "../../lib/format";
+import { apiFetch, type AuditEntry } from "../../lib/api";
+import { useAdminQuery } from "../../lib/use-admin-query";
 
 export default function AuditPage() {
-  const [entries, setEntries] = useState<AuditEntry[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [page, setPage] = useState(1);
-  const [totalPages, setTotalPages] = useState(1);
   const [actorFilter, setActorFilter] = useState("");
   const [actionFilter, setActionFilter] = useState("");
-
-  useEffect(() => {
-    setLoading(true);
-    const params = new URLSearchParams({ page: String(page), pageSize: "20" });
+  const path = useMemo(() => {
+    const params = new URLSearchParams();
     if (actorFilter) params.set("actor", actorFilter);
     if (actionFilter) params.set("action", actionFilter);
-
-    fetch(`/api/v1/admin/audit?${params}`)
-      .then((r) => {
-        if (!r.ok) throw new Error(`HTTP ${r.status}`);
-        return r.json();
-      })
-      .then((data) => {
-        setEntries(data.items ?? data);
-        setTotalPages(data.totalPages ?? 1);
-      })
-      .catch((e) => setError(e.message))
-      .finally(() => setLoading(false));
-  }, [page, actorFilter, actionFilter]);
+    const query = params.toString();
+    return query ? `/v1/admin/audit?${query}` : "/v1/admin/audit";
+  }, [actorFilter, actionFilter]);
+  const { data, loading, error, reload } = useAdminQuery<AuditEntry[]>(path, apiFetch);
+  const entries = data ?? [];
 
   return (
     <div className="page">
@@ -53,10 +33,7 @@ export default function AuditPage() {
               id="actor"
               type="text"
               value={actorFilter}
-              onChange={(e) => {
-                setActorFilter(e.target.value);
-                setPage(1);
-              }}
+              onChange={(event) => setActorFilter(event.target.value)}
               placeholder="筛选操作人..."
             />
           </div>
@@ -66,24 +43,17 @@ export default function AuditPage() {
               id="action"
               type="text"
               value={actionFilter}
-              onChange={(e) => {
-                setActionFilter(e.target.value);
-                setPage(1);
-              }}
+              onChange={(event) => setActionFilter(event.target.value)}
               placeholder="筛选操作类型..."
             />
           </div>
         </div>
       </div>
 
-      {loading ? (
-        <div className="card loading">加载中...</div>
-      ) : error ? (
-        <div className="card error-box">加载失败: {error}</div>
-      ) : entries.length === 0 ? (
-        <div className="card empty">暂无审计记录</div>
-      ) : (
-        <>
+      <QueryStatus loading={loading} error={error} onRetry={reload} className="card">
+        {entries.length === 0 ? (
+          <EmptyHint>暂无审计记录。完成登录、策略或注册操作后将在此显示</EmptyHint>
+        ) : (
           <div className="table-wrap">
             <table>
               <thead>
@@ -96,17 +66,17 @@ export default function AuditPage() {
                 </tr>
               </thead>
               <tbody>
-                {entries.map((e) => (
-                  <tr key={e.id}>
+                {entries.map((entry) => (
+                  <tr key={entry.id}>
                     <td className="mono" style={{ whiteSpace: "nowrap" }}>
-                      {new Date(e.ts).toLocaleString("zh-CN")}
+                      {formatDateTime(entry.ts)}
                     </td>
-                    <td>{e.actor}</td>
-                    <td>{e.action}</td>
-                    <td>{e.target}</td>
+                    <td>{entry.actor}</td>
+                    <td>{entry.action}</td>
+                    <td>{entry.target}</td>
                     <td>
                       <code className="mono" style={{ fontSize: "0.75rem" }}>
-                        {e.requestId}
+                        {entry.requestId}
                       </code>
                     </td>
                   </tr>
@@ -114,20 +84,8 @@ export default function AuditPage() {
               </tbody>
             </table>
           </div>
-
-          <div className="pagination">
-            <button disabled={page <= 1} onClick={() => setPage(page - 1)}>
-              上一页
-            </button>
-            <span style={{ fontSize: "0.85rem", color: "var(--text-secondary)" }}>
-              第 {page} / {totalPages} 页
-            </span>
-            <button disabled={page >= totalPages} onClick={() => setPage(page + 1)}>
-              下一页
-            </button>
-          </div>
-        </>
-      )}
+        )}
+      </QueryStatus>
     </div>
   );
 }
