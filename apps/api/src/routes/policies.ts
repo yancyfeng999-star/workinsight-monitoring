@@ -113,7 +113,5 @@ function collectionPolicyForDevice(payload: unknown): unknown {
   if (rec.collection && typeof rec.collection === "object" && !Array.isArray(rec.collection)) {
     return rec.collection;
   }
-  const collection = { ...rec };
-  delete collection.rollout_percent;
-  return collection;
+  return payload;
 }

@@ -4,7 +4,9 @@ import { readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { buildApp } from "../src/index.js";
+import type { BuildOptions } from "../src/index.js";
 import { hashToken } from "../src/auth/password.js";
+import { generatePolicyKeyPair, signPolicy, verifyPolicy } from "../src/policy/sign-policy.js";
 import { withTestSchema } from "./helpers/test-db.js";
 import {
   AUDIT_ENTRY_KEYS,
@@ -53,11 +55,12 @@ type AppCtx = { url: string; app: Awaited<ReturnType<typeof buildApp>> };
 
 async function runInSchema(
   schema: string,
-  fn: (ctx: AppCtx) => Promise<void>
+  fn: (ctx: AppCtx) => Promise<void>,
+  opts: BuildOptions = {}
 ): Promise<void> {
   const conn = new URL(TEST_DB_URL);
   conn.searchParams.set("options", `-csearch_path=${schema},public`);
-  const app = await buildApp(conn.toString());
+  const app = await buildApp(conn.toString(), opts);
   const address = await app.app.listen({ port: 0, host: "127.0.0.1" });
   try {
     await fn({ url: address, app });
@@ -793,6 +796,58 @@ test("signed collection policy sent to devices does not include rollout_percent"
       const listed = await api(ctx, "/v1/admin/policies", { token });
       assert.equal(asRecord(asArray(listed.body)[0]).rolloutPercent, 35);
     });
+  });
+});
+
+test("flat device-policy payload keeps the signed blob including rollout_percent", async () => {
+  const key = generatePolicyKeyPair();
+  const flat = {
+    policy_version: 1,
+    collection_enabled: true,
+    window_title_enabled: false,
+    idle_after_seconds: 300,
+    blocked_apps: ["com.1password.1password"],
+    blocked_domains: ["onepassword.com"],
+    issued_at: "2026-08-10T00:00:00.000Z",
+    expires_at: "2026-08-17T00:00:00.000Z",
+    rollout_percent: 40,
+  };
+  const signed = signPolicy(flat, key.privateKeyPem);
+
+  await withTestSchema(TEST_DB_URL, async (schema) => {
+    await runInSchema(
+      schema,
+      async (ctx) => {
+        await seedIdentities(ctx.app.pool);
+        await ctx.app.pool.query(
+          `INSERT INTO device_credentials (device_id, org_id, subject_id, token_hash, expires_at)
+           VALUES ('dev_flat_policy','org_a','sub_a',$1, now() + interval '30 days')`,
+          [hashToken("token_flat_policy")]
+        );
+        await ctx.app.pool.query(
+          `INSERT INTO collection_policies (policy_version, org_id, payload, signature, signing_key_fingerprint)
+           VALUES (1,'org_a',$1,$2,$3)`,
+          [JSON.stringify(flat), signed.signature, key.fingerprint]
+        );
+
+        const resp = await fetch(ctx.url + "/v1/device-policy", {
+          headers: { authorization: "Bearer token_flat_policy" },
+        });
+        const raw = await resp.text();
+        assert.equal(resp.status, 200, raw);
+        const body = asRecord(JSON.parse(raw));
+        const policy = asRecord(body.policy);
+        assert.equal(policy.rollout_percent, 40);
+        assert.equal(typeof body.signature, "string");
+        assert.equal(verifyPolicy(body.policy, String(body.signature), key.publicKeyPem), true);
+        assert.equal(verifyPolicy(body.policy, String(body.signature), String(body.signing_public_key)), true);
+      },
+      {
+        policyPrivateKeyPem: key.privateKeyPem,
+        policyPublicKeyPem: key.publicKeyPem,
+        policyFingerprint: key.fingerprint,
+      }
+    );
   });
 });
 
