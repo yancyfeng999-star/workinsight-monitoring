@@ -1,5 +1,6 @@
 import "./styles.css";
 import logoUrl from "./workinsight-logo.png";
+import { bindSetupForm, type InvokeFn } from "./setup-controller";
 
 declare global {
   interface Window {
@@ -39,30 +40,17 @@ app.innerHTML = `
   </main>
 `;
 
-const form = document.getElementById("enroll") as HTMLFormElement;
-const status = document.getElementById("status")!;
-
-form.addEventListener("submit", async (e) => {
-  e.preventDefault();
-  const data = new FormData(form);
-  status.textContent = "注册中…";
-  status.dataset.state = "busy";
-  try {
-    const result = (await window.__TAURI__?.core.invoke("enroll", {
-      apiUrl: String(data.get("api_url")),
-      code: String(data.get("code")),
-      label: String(data.get("label") ?? ""),
-    })) as { ok: boolean; error?: string };
-    if (result.ok) {
-      form.hidden = true;
-      status.textContent = "注册成功，Agent 已在后台运行。";
-      status.dataset.state = "ok";
-    } else {
-      status.textContent = `注册失败：${result.error ?? "未知错误"}`;
-      status.dataset.state = "error";
-    }
-  } catch (err) {
-    status.textContent = `注册失败：${String(err)}`;
-    status.dataset.state = "error";
+const invoke: InvokeFn = (command, args) => {
+  const bridge = window.__TAURI__?.core.invoke;
+  if (!bridge) {
+    return Promise.reject(new Error("Tauri bridge unavailable"));
   }
-});
+  // Rust enroll still takes `label`; controller/InvokeFn expose deviceLabel.
+  return bridge(command, {
+    apiUrl: args.apiUrl,
+    code: args.code,
+    label: args.deviceLabel,
+  });
+};
+
+bindSetupForm(document, invoke);
