@@ -3,7 +3,9 @@ import assert from "node:assert/strict";
 import { resolve } from "node:path";
 import pg from "pg";
 import { buildApp } from "../src/index.js";
-import { hashToken } from "../src/auth/password.js";
+import type { FastifyRequest } from "fastify";
+import { readSessionToken } from "../src/auth/admin-session.js";
+import { hashPasswordArgon2id, hashToken } from "../src/auth/password.js";
 import { withTestSchema } from "./helpers/test-db.js";
 
 const TEST_DB_URL = process.env.TEST_DATABASE_URL ?? "postgres://workinsight:workinsight_dev@localhost:5433/workinsight_test";
@@ -186,6 +188,104 @@ test("admin view of subject activity writes audit log", async () => {
       assert.equal(resp.status, 200);
       const logs = await ctx.app.pool.query("SELECT * FROM audit_logs WHERE action = 'view_subject_activity'");
       assert.ok(logs.rows.length >= 1);
+    });
+  });
+});
+
+function fakeReq(headers: Record<string, string>): FastifyRequest {
+  return { headers } as FastifyRequest;
+}
+
+test("readSessionToken prefers Bearer and matches the exact wi_session cookie name", () => {
+  assert.equal(readSessionToken(fakeReq({ authorization: "Bearer abc" })), "abc");
+  assert.equal(readSessionToken(fakeReq({ cookie: "wi_session=fromcookie" })), "fromcookie");
+  assert.equal(readSessionToken(fakeReq({ cookie: "old_wi_session=nope" })), null);
+  assert.equal(readSessionToken(fakeReq({ cookie: "prefix_wi_session=nope; wi_session=yes" })), "yes");
+  assert.equal(
+    readSessionToken(fakeReq({ authorization: "Bearer tok", cookie: "wi_session=other" })),
+    "tok"
+  );
+});
+
+function setCookieHeaders(resp: Response): string[] {
+  const headers = resp.headers as Headers & { getSetCookie?: () => string[] };
+  if (typeof headers.getSetCookie === "function") return headers.getSetCookie();
+  const single = resp.headers.get("set-cookie");
+  return single ? [single] : [];
+}
+
+function cookiePair(setCookie: string): { name: string; value: string } | null {
+  const pair = setCookie.split(";", 1)[0]?.trim() ?? "";
+  const eq = pair.indexOf("=");
+  if (eq <= 0) return null;
+  return { name: pair.slice(0, eq), value: pair.slice(eq + 1) };
+}
+
+test("admin login sets HttpOnly wi_session and logout clears the session", async () => {
+  await withTestSchema(TEST_DB_URL, async (schema) => {
+    await runInSchema(schema, async (ctx) => {
+      await seed(ctx);
+      const password = "admin-pass-test";
+      await ctx.app.pool.query(
+        `INSERT INTO admin_users (admin_user_id, org_id, username, password_hash, role)
+         VALUES ('admin_login','org_a','console_admin',$1,'company_admin')`,
+        [await hashPasswordArgon2id(password)]
+      );
+
+      const login = await fetch(ctx.url + "/v1/admin/login", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ username: "console_admin", password }),
+      });
+      assert.equal(login.status, 200);
+      const loginBody = await login.json();
+      assert.equal(Object.hasOwn(loginBody, "token"), false);
+      assert.deepEqual(loginBody.user, {
+        admin_user_id: "admin_login",
+        username: "console_admin",
+        role: "company_admin",
+        org_id: "org_a",
+      });
+
+      const loginCookies = setCookieHeaders(login);
+      const sessionSet = loginCookies.find((c) => cookiePair(c)?.name === "wi_session");
+      assert.ok(sessionSet, "login Set-Cookie must include wi_session");
+      assert.match(sessionSet, /HttpOnly/i);
+      assert.match(sessionSet, /SameSite=Strict/i);
+      assert.match(sessionSet, /Path=\//);
+      const sessionValue = cookiePair(sessionSet)?.value ?? "";
+      assert.ok(sessionValue.length > 0);
+
+      const me = await fetch(ctx.url + "/v1/admin/me", {
+        headers: { cookie: `old_wi_session=forged; wi_session=${sessionValue}` },
+      });
+      assert.equal(me.status, 200);
+      const meBody = await me.json();
+      assert.equal(meBody.user.admin_user_id, "admin_login");
+
+      const forgedOnly = await fetch(ctx.url + "/v1/admin/me", {
+        headers: { cookie: "old_wi_session=" + sessionValue },
+      });
+      assert.equal(forgedOnly.status, 401);
+
+      const logout = await fetch(ctx.url + "/v1/admin/logout", {
+        method: "POST",
+        headers: { cookie: `wi_session=${sessionValue}` },
+      });
+      assert.equal(logout.status, 200);
+      const logoutCookies = setCookieHeaders(logout);
+      const cleared = logoutCookies.find((c) => cookiePair(c)?.name === "wi_session");
+      assert.ok(cleared, "logout Set-Cookie must clear wi_session");
+      assert.match(cleared, /Max-Age=0/i);
+      assert.match(cleared, /HttpOnly/i);
+      assert.match(cleared, /SameSite=Strict/i);
+
+      const meAfter = await fetch(ctx.url + "/v1/admin/me", {
+        headers: { cookie: `wi_session=${sessionValue}` },
+      });
+      assert.equal(meAfter.status, 401);
+      const remaining = await ctx.app.pool.query("SELECT COUNT(*)::int AS n FROM admin_sessions");
+      assert.equal(remaining.rows[0].n, 0);
     });
   });
 });

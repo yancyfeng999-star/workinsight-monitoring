@@ -1,7 +1,7 @@
 import type { FastifyInstance } from "fastify";
 import type { Pool } from "pg";
 import type { AdminRole } from "../auth/admin-session.js";
-import { AdminSession, requireAdmin, setSessionCookie } from "../auth/admin-session.js";
+import { AdminSession, clearSessionCookie, readSessionToken, requireAdmin, setSessionCookie } from "../auth/admin-session.js";
 import { hashToken, verifyPasswordArgon2id, randomToken } from "../auth/password.js";
 
 export function registerAdminRoutes(app: FastifyInstance, pool: Pool, sessions: AdminSession): void {
@@ -21,17 +21,15 @@ export function registerAdminRoutes(app: FastifyInstance, pool: Pool, sessions: 
       const token = await sessions.create(row.admin_user_id);
       setSessionCookie(reply, token);
       return reply.code(200).send({
-        token,
         user: { admin_user_id: row.admin_user_id, username: row.username, role: row.role, org_id: row.org_id },
       });
     }
   );
 
   app.post("/v1/admin/logout", async (req, reply) => {
-    const header = String(req.headers.authorization ?? "");
-    if (header.startsWith("Bearer ")) {
-      await sessions.destroy(header.slice(7));
-    }
+    const token = readSessionToken(req);
+    if (token) await sessions.destroy(token);
+    clearSessionCookie(reply);
     return reply.code(200).send({ ok: true });
   });
 

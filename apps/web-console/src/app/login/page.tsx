@@ -18,6 +18,8 @@ export default function LoginPage() {
     try {
       const res = await fetch("/api/v1/admin/login", {
         method: "POST",
+        credentials: "same-origin",
+        cache: "no-store",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ username, password }),
       });
@@ -27,8 +29,7 @@ export default function LoginPage() {
         throw new Error(body || "登录失败");
       }
 
-      const { token } = (await res.json()) as { token: string };
-      document.cookie = `wi_token=${token}; path=/; max-age=86400; SameSite=Lax`;
+      await res.json().catch(() => null);
       router.push("/");
     } catch (err) {
       setError(err instanceof Error ? err.message : "登录失败");

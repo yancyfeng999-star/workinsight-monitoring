@@ -1,5 +1,3 @@
-import { cookies } from "next/headers";
-
 const BASE = "/api";
 
 export class ApiError extends Error {
@@ -9,26 +7,22 @@ export class ApiError extends Error {
   }
 }
 
-async function getAuthHeader(): Promise<Record<string, string>> {
-  const store = await cookies();
-  const token = store.get("wi_token")?.value;
-  return token ? { Authorization: `Bearer ${token}` } : {};
-}
-
 export async function apiFetch<T>(
   path: string,
   init?: RequestInit
 ): Promise<T> {
-  const auth = await getAuthHeader();
   const res = await fetch(`${BASE}${path}`, {
     ...init,
+    credentials: "same-origin",
+    cache: "no-store",
     headers: {
       "Content-Type": "application/json",
-      ...auth,
       ...init?.headers,
     },
-    cache: "no-store",
   });
+  if (res.status === 401) {
+    throw new ApiError(401, "登录已过期");
+  }
   if (!res.ok) {
     const body = await res.text().catch(() => "");
     throw new ApiError(res.status, body || `HTTP ${res.status}`);
