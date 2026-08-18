@@ -19,6 +19,7 @@ export function useAdminQuery<T>(
   const [error, setError] = useState<QueryError | null>(null);
   const [tick, setTick] = useState(0);
   const seenPath = useRef<string | null>(null);
+  const hasDataRef = useRef(false);
 
   const reload = useCallback(() => {
     setTick((value) => value + 1);
@@ -28,14 +29,18 @@ export function useAdminQuery<T>(
     let cancelled = false;
     const pathChanged = seenPath.current !== path;
     seenPath.current = path;
-    setError(null);
     if (pathChanged) {
+      hasDataRef.current = false;
       setData(null);
-      setLoading(true);
     }
+    if (!hasDataRef.current) setLoading(true);
+    setError(null);
     load<T>(path)
       .then((value) => {
-        if (!cancelled) setData(value);
+        if (!cancelled) {
+          hasDataRef.current = true;
+          setData(value);
+        }
       })
       .catch((err: unknown) => {
         if (!cancelled) setError(classifyQueryError(err));

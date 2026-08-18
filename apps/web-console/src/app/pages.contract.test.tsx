@@ -104,6 +104,38 @@ describe("Devices page", () => {
     expect(await screen.findByText("网络连接失败，请检查网络后重试")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "重试" })).toBeInTheDocument();
   });
+
+  it("does not show empty-success copy while a retry is in flight", async () => {
+    let finishRetry: ((value: unknown) => void) | undefined;
+    const fetchMock = vi
+      .fn()
+      .mockRejectedValueOnce(new TypeError("Failed to fetch"))
+      .mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            finishRetry = resolve;
+          })
+      );
+    vi.stubGlobal("fetch", fetchMock);
+    const user = userEvent.setup();
+
+    render(<DevicesPage />);
+    expect(await screen.findByText("网络连接失败，请检查网络后重试")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "重试" }));
+
+    expect(await screen.findByText("加载中...")).toBeInTheDocument();
+    expect(screen.queryByText("请先注册设备")).toBeNull();
+    expect(screen.queryByText("网络连接失败，请检查网络后重试")).toBeNull();
+
+    finishRetry?.({
+      ok: true,
+      status: 200,
+      json: async () => [],
+      text: async () => "[]",
+    });
+    expect(await screen.findByText("请先注册设备")).toBeInTheDocument();
+  });
 });
 
 describe("Enrollment page", () => {
@@ -185,18 +217,20 @@ describe("Policies page", () => {
     render(<PoliciesPage />);
     expect(await screen.findByText("请先发布采集策略")).toBeInTheDocument();
 
-    const textarea = screen.getByLabelText("策略内容 (JSON)");
+    const textarea = screen.getByLabelText("策略内容 (JSON)") as HTMLTextAreaElement;
     const placeholder = textarea.getAttribute("placeholder") ?? "";
     expect(placeholder).toBe(POLICY_PLACEHOLDER);
     for (const key of POLICY_TEMPLATE_KEYS) {
       expect(placeholder).toContain(key);
     }
     expect(placeholder.toLowerCase().includes(FORBIDDEN_POLICY_TOKEN)).toBe(false);
+    const initial = JSON.parse(textarea.value) as Record<string, unknown>;
+    expect(initial).not.toHaveProperty("blocked_apps");
+    expect(initial).not.toHaveProperty("blocked_domains");
 
     fireEvent.change(textarea, {
       target: {
-        value:
-          '{"collection_enabled":true,"window_title_enabled":false,"idle_after_seconds":300,"blocked_apps":[],"blocked_domains":[]}',
+        value: '{"collection_enabled":true,"window_title_enabled":false,"idle_after_seconds":300}',
       },
     });
     fireEvent.change(screen.getByLabelText("灰度比例 (%)"), { target: { value: "10" } });
@@ -214,6 +248,9 @@ describe("Policies page", () => {
     expect(body.rolloutPercent).toBe(10);
     expect(body.content).toContain("collection_enabled");
     expect(body.content.toLowerCase().includes(FORBIDDEN_POLICY_TOKEN)).toBe(false);
+    const posted = JSON.parse(body.content) as Record<string, unknown>;
+    expect(posted).not.toHaveProperty("blocked_apps");
+    expect(posted).not.toHaveProperty("blocked_domains");
   });
 });
 

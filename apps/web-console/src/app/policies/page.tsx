@@ -14,11 +14,17 @@ export const POLICY_PLACEHOLDER = `{
   "blocked_domains": []
 }`;
 
+const POLICY_DEFAULT = `{
+  "collection_enabled": true,
+  "window_title_enabled": false,
+  "idle_after_seconds": 300
+}`;
+
 export default function PoliciesPage() {
   const { data, loading, error, reload } = useAdminQuery<Policy[]>("/v1/admin/policies", apiFetch);
   const policies = data ?? [];
   const current = policies[0] ?? null;
-  const [newContent, setNewContent] = useState(POLICY_PLACEHOLDER);
+  const [newContent, setNewContent] = useState(POLICY_DEFAULT);
   const [rollout, setRollout] = useState(0);
   const [submitting, setSubmitting] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
@@ -32,7 +38,7 @@ export default function PoliciesPage() {
         content: newContent,
         rolloutPercent: Math.trunc(Number(rollout)),
       });
-      setNewContent(POLICY_PLACEHOLDER);
+      setNewContent(POLICY_DEFAULT);
       setRollout(0);
       reload();
     } catch (err) {
