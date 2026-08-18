@@ -25,13 +25,9 @@
     "registrable_domain": "example.com",
     "url_path": null
   },
-  "privacy": {
-    "policy_version": 7,
-    "redaction_flags": ["query_removed", "title_pii_removed"],
-    "private_mode": false
-  },
+  "privacy": "normal",
   "agent": {
-    "version": "0.1.1",
+    "version": "0.1.2",
     "os": "macos"
   }
 }
@@ -47,7 +43,7 @@
 | 域名 | ≤ 253 ASCII 字符，必须为 registrable domain |
 | url_path | 默认必须为 `null` |
 | 禁止字段 | Agent payload 不允许 `category`/`score`/`metric`/`insight`/模型输出字段 |
-| private_mode | `true` 的活动事件在 Agent 层拒绝入队，服务端二次拒绝 |
+| privacy | v1 已接受事件必须为字符串字面量 `"normal"`；`"private"` 在 Agent 层拒绝入队，服务端二次拒绝。v1 **不是**结构化对象；`policy_version` / `redaction_flags` / `private_mode` 对象属于未来版本化 schema 迁移，不得静默引入 |
 | 幂等 | 同一设备同一 `sequence_no` 只能绑定一个 `event_id` |
 | Schema | 只允许已知字段；未知字段拒绝或隔离，不直接入生产表 |
 
@@ -72,4 +68,4 @@
 
 ## 校验优先级（服务端接收层）
 
-Schema 校验 → 组织/设备身份 → 时间与字段上限 → private_mode 拒绝 → 幂等去重 → 落库。
+Schema 校验 → 组织/设备身份 → 时间与字段上限 → `privacy != "normal"` 拒绝 → 幂等去重 → 落库。

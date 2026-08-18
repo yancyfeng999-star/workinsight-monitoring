@@ -2,8 +2,10 @@ import type { FastifyInstance } from "fastify";
 import type { Pool } from "pg";
 import type { AdminSession, AdminRole } from "../auth/admin-session.js";
 import { requireAdmin } from "../auth/admin-session.js";
+import { hashToken } from "../auth/password.js";
 import { signPolicy, verifyPolicy, generatePolicyKeyPair } from "../policy/sign-policy.js";
 import type { PolicySigningKey } from "../policy/sign-policy.js";
+import { validateCollectionFields } from "../policy/collection-fields.js";
 
 const DEFAULT_POLICY = {
   policy_version: 1,
@@ -37,13 +39,13 @@ export function registerPoliciesRoutes(
     if (!bearer) return reply.code(401).send({ error: "unauthorized" });
     const orgRes = await pool.query(
       `SELECT org_id FROM device_credentials WHERE token_hash = $1 AND revoked_at IS NULL`,
-      [hashTokenLocal(bearer)]
+      [hashToken(bearer)]
     );
     const orgRow = orgRes.rows[0];
     if (!orgRow) return reply.code(401).send({ error: "unauthorized" });
 
     const polRes = await pool.query(
-      `SELECT payload, signature FROM collection_policies WHERE org_id = $1 ORDER BY policy_version DESC LIMIT 1`,
+      `SELECT payload, signature, signing_key_fingerprint FROM collection_policies WHERE org_id = $1 ORDER BY policy_version DESC LIMIT 1`,
       [orgRow.org_id]
     );
     if (polRes.rowCount === 0) {
@@ -63,7 +65,7 @@ export function registerPoliciesRoutes(
     }
     const row = polRes.rows[0];
     return reply.code(200).send({
-      policy: row.payload,
+      policy: collectionPolicyForDevice(row.payload),
       signature: row.signature,
       signing_key_fingerprint: row.signing_key_fingerprint,
       signing_public_key: key.publicKeyPem,
@@ -86,12 +88,19 @@ export function registerPoliciesRoutes(
     if (!admin) return;
     const body = req.body;
     if (!body || typeof body !== "object") return reply.code(400).send({ error: "policy required" });
+    const parsed = validateCollectionFields(body);
+    if (!parsed.ok) return reply.code(400).send({ error: parsed.error });
     const polRes = await pool.query(
       `SELECT COALESCE(MAX(policy_version), 0) + 1 AS next FROM collection_policies WHERE org_id = $1`,
       [admin.org_id]
     );
     const nextVersion = polRes.rows[0].next;
-    const payload = { ...DEFAULT_POLICY, ...body, policy_version: nextVersion, issued_at: new Date().toISOString() };
+    const payload = {
+      ...DEFAULT_POLICY,
+      ...parsed.value,
+      policy_version: nextVersion,
+      issued_at: new Date().toISOString(),
+    };
     const sig = signPolicy(payload, key.privateKeyPem);
     await pool.query(
       `INSERT INTO collection_policies (policy_version, org_id, payload, signature, signing_key_fingerprint)
@@ -106,7 +115,11 @@ export function registerPoliciesRoutes(
   });
 }
 
-function hashTokenLocal(token: string): string {
-  const { createHash } = require("node:crypto") as typeof import("node:crypto");
-  return createHash("sha256").update(token).digest("hex");
+function collectionPolicyForDevice(payload: unknown): unknown {
+  if (!payload || typeof payload !== "object" || Array.isArray(payload)) return payload;
+  const rec = payload as Record<string, unknown>;
+  if (rec.collection && typeof rec.collection === "object" && !Array.isArray(rec.collection)) {
+    return rec.collection;
+  }
+  return payload;
 }

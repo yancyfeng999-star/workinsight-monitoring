@@ -59,18 +59,59 @@ export class AdminSession {
   }
 }
 
+const SESSION_COOKIE = "wi_session";
+
+export function readSessionToken(req: FastifyRequest): string | null {
+  const authorization = req.headers.authorization;
+  if (typeof authorization === "string" && authorization.startsWith("Bearer ")) {
+    const bearer = authorization.slice("Bearer ".length).trim();
+    if (bearer.length > 0) return bearer;
+  }
+  return readNamedCookie(req.headers.cookie, SESSION_COOKIE);
+}
+
+function readNamedCookie(header: string | string[] | undefined, name: string): string | null {
+  if (header === undefined) return null;
+  const raw = Array.isArray(header) ? header.join("; ") : header;
+  for (const part of raw.split(";")) {
+    const trimmed = part.trim();
+    const eq = trimmed.indexOf("=");
+    if (eq <= 0) continue;
+    if (trimmed.slice(0, eq) !== name) continue;
+    const value = trimmed.slice(eq + 1);
+    if (value.length === 0) return null;
+    try {
+      return decodeURIComponent(value);
+    } catch {
+      return value;
+    }
+  }
+  return null;
+}
+
+function sessionCookieSecure(reply: FastifyReply): boolean {
+  if (process.env.COOKIE_SECURE === "true") return true;
+  if (process.env.COOKIE_SECURE === "false") return false;
+  return reply.request.protocol === "https";
+}
+
+function sessionCookie(value: string, reply: FastifyReply, extras: string[] = []): string {
+  const parts = [`${SESSION_COOKIE}=${value}`, "HttpOnly", "SameSite=Strict", "Path=/", ...extras];
+  if (sessionCookieSecure(reply)) parts.push("Secure");
+  return parts.join("; ");
+}
+
 export async function requireAdmin(
   req: FastifyRequest,
   reply: FastifyReply,
   sessions: AdminSession,
   allowedRoles: AdminRole[]
 ): Promise<AdminPrincipal | null> {
-  const header = req.headers.authorization;
-  if (!header || !header.startsWith("Bearer ")) {
+  const token = readSessionToken(req);
+  if (!token) {
     reply.code(401).send({ error: "unauthorized" });
     return null;
   }
-  const token = header.slice(7);
   const principal = await sessions.validate(token);
   if (!principal) {
     reply.code(401).send({ error: "unauthorized" });
@@ -84,5 +125,9 @@ export async function requireAdmin(
 }
 
 export function setSessionCookie(reply: FastifyReply, token: string): void {
-  reply.header("Set-Cookie", `wi_session=${token}; HttpOnly; Secure; SameSite=Strict; Path=/`);
+  reply.header("Set-Cookie", sessionCookie(token, reply));
+}
+
+export function clearSessionCookie(reply: FastifyReply): void {
+  reply.header("Set-Cookie", sessionCookie("", reply, ["Max-Age=0"]));
 }

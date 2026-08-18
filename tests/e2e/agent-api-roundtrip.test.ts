@@ -6,6 +6,14 @@ import pg from "pg";
 const DB_URL = process.env.E2E_DATABASE_URL ?? "postgres://workinsight:workinsight_dev@localhost:5433/workinsight_test";
 const API_BASE = process.env.E2E_API_BASE ?? "http://127.0.0.1:8080";
 
+function recentRange(offsetMinutes, durationMinutes = 5) {
+  const startedMs = Date.now() - offsetMinutes * 60_000;
+  return {
+    started: new Date(startedMs).toISOString(),
+    ended: new Date(startedMs + durationMinutes * 60_000).toISOString(),
+  };
+}
+
 function validEvent(seq, started, ended, orgId, deviceId, subjectId) {
   return {
     schema_version: 1,
@@ -21,7 +29,7 @@ function validEvent(seq, started, ended, orgId, deviceId, subjectId) {
     timezone: "UTC",
     activity: { app_id: "com.apple.Xcode", app_name: "Xcode", window_title: null, browser: null, registrable_domain: null, url_path: null },
     privacy: "normal",
-    agent: { version: "0.1.1", os: "macos" },
+    agent: { version: "0.1.2", os: "macos" },
   };
 }
 
@@ -45,16 +53,18 @@ test("full roundtrip: enroll -> upload -> ack -> DB -> exact delete", async () =
     const enrollResp = await fetch(`${API_BASE}/v1/enroll`, {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ enrollment_code: code, agent_version: "0.1.1", os: "macos", device_label: "e2e" }),
+      body: JSON.stringify({ enrollment_code: code, agent_version: "0.1.2", os: "macos", device_label: "e2e" }),
     });
     assert.equal(enrollResp.status, 201);
     const enrolled = await enrollResp.json();
     assert.ok(enrolled.device_token);
     const deviceToken = enrolled.device_token;
 
+    const r1 = recentRange(60);
+    const r2 = recentRange(55);
     const events = [
-      validEvent(1, "2026-08-10T01:00:00.000Z", "2026-08-10T01:05:00.000Z", orgId, enrolled.device_id, subjectId),
-      validEvent(2, "2026-08-10T01:05:00.000Z", "2026-08-10T01:10:00.000Z", orgId, enrolled.device_id, subjectId),
+      validEvent(1, r1.started, r1.ended, orgId, enrolled.device_id, subjectId),
+      validEvent(2, r2.started, r2.ended, orgId, enrolled.device_id, subjectId),
     ];
     const upResp = await fetch(`${API_BASE}/v1/activity-batches`, {
       method: "POST",
@@ -108,12 +118,13 @@ test("offline resend is idempotent (no duplicates)", async () => {
     const enrollResp = await fetch(`${API_BASE}/v1/enroll`, {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ enrollment_code: code, agent_version: "0.1.1", os: "macos" }),
+      body: JSON.stringify({ enrollment_code: code, agent_version: "0.1.2", os: "macos" }),
     });
     assert.equal(enrollResp.status, 201);
     const enrolled = await enrollResp.json();
 
-    const evt = validEvent(7, "2026-08-10T02:00:00.000Z", "2026-08-10T02:05:00.000Z", orgId, enrolled.device_id, subjectId);
+    const range = recentRange(45);
+    const evt = validEvent(7, range.started, range.ended, orgId, enrolled.device_id, subjectId);
     const send = () =>
       fetch(`${API_BASE}/v1/activity-batches`, {
         method: "POST",

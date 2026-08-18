@@ -2,6 +2,7 @@
 
 import { FormEvent, useState } from "react";
 import { useRouter } from "next/navigation";
+import { apiPost } from "../../lib/api";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -16,19 +17,7 @@ export default function LoginPage() {
     setLoading(true);
 
     try {
-      const res = await fetch("/api/v1/admin/login", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ username, password }),
-      });
-
-      if (!res.ok) {
-        const body = await res.text();
-        throw new Error(body || "登录失败");
-      }
-
-      const { token } = (await res.json()) as { token: string };
-      document.cookie = `wi_token=${token}; path=/; max-age=86400; SameSite=Lax`;
+      await apiPost("/v1/admin/login", { username, password });
       router.push("/");
     } catch (err) {
       setError(err instanceof Error ? err.message : "登录失败");

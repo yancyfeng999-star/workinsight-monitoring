@@ -1,45 +1,33 @@
 "use client";
 
-import { useEffect, useState } from "react";
-
-interface DashboardStats {
-  coverageRate: number;
-  onlineDevices: number;
-  avgDelaySec: number;
-  categoryBreakdown: { category: string; count: number; total: number }[];
-  recentAlerts: { id: string; message: string; severity: string; ts: string }[];
-}
+import { EmptyHint, QueryStatus } from "../components/query-state";
+import { formatPercent, formatTime } from "../lib/format";
+import { apiFetch, type DashboardStats } from "../lib/api";
+import { useAdminQuery } from "../lib/use-admin-query";
 
 export default function DashboardPage() {
-  const [data, setData] = useState<DashboardStats | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const { data, loading, error, reload } = useAdminQuery<DashboardStats>("/v1/admin/dashboard", apiFetch);
 
-  useEffect(() => {
-    fetch("/api/v1/admin/dashboard")
-      .then((r) => {
-        if (!r.ok) throw new Error(`HTTP ${r.status}`);
-        return r.json();
-      })
-      .then(setData)
-      .catch((e) => setError(e.message))
-      .finally(() => setLoading(false));
-  }, []);
+  return (
+    <QueryStatus loading={loading} error={error} onRetry={reload}>
+      {data ? <DashboardView data={data} /> : <EmptyHint>请先注册设备</EmptyHint>}
+    </QueryStatus>
+  );
+}
 
-  if (loading) return <div className="page loading">加载中...</div>;
-  if (error) return <div className="page error-box">加载失败: {error}</div>;
-  if (!data) return <div className="page empty">暂无数据</div>;
-
+function DashboardView({ data }: { data: DashboardStats }) {
   return (
     <div className="page">
       <div className="page-header">
         <h1 className="page-title">系统概览</h1>
       </div>
 
+      {data.onlineDevices === 0 ? <div className="alert alert-info">请先注册设备</div> : null}
+
       <div className="stat-grid">
         <div className="card">
           <div className="card-title">今日覆盖率</div>
-          <div className="card-value">{(data.coverageRate * 100).toFixed(1)}%</div>
+          <div className="card-value">{formatPercent(data.coverageRate)}</div>
         </div>
         <div className="card">
           <div className="card-title">在线设备</div>
@@ -55,7 +43,7 @@ export default function DashboardPage() {
         <div className="card">
           <h2 style={{ fontSize: "1rem", fontWeight: 600, marginBottom: 12 }}>分类明细</h2>
           {data.categoryBreakdown.length === 0 ? (
-            <div className="empty">暂无分类数据</div>
+            <div className="empty">暂无分类数据，待设备上报活动后生成</div>
           ) : (
             <div className="table-wrap">
               <table>
@@ -68,13 +56,13 @@ export default function DashboardPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {data.categoryBreakdown.map((c) => (
-                    <tr key={c.category}>
-                      <td>{c.category}</td>
-                      <td style={{ textAlign: "right" }}>{c.count}</td>
-                      <td style={{ textAlign: "right" }}>{c.total}</td>
+                  {data.categoryBreakdown.map((item) => (
+                    <tr key={item.category}>
+                      <td>{item.category}</td>
+                      <td style={{ textAlign: "right" }}>{item.count}</td>
+                      <td style={{ textAlign: "right" }}>{item.total}</td>
                       <td style={{ textAlign: "right" }}>
-                        {c.total > 0 ? ((c.count / c.total) * 100).toFixed(1) + "%" : "-"}
+                        {item.total > 0 ? formatPercent(item.count / item.total) : "-"}
                       </td>
                     </tr>
                   ))}
@@ -87,24 +75,24 @@ export default function DashboardPage() {
         <div className="card">
           <h2 style={{ fontSize: "1rem", fontWeight: 600, marginBottom: 12 }}>最近告警</h2>
           {data.recentAlerts.length === 0 ? (
-            <div className="empty">暂无告警</div>
+            <div className="empty">暂无告警。设备健康异常将在此显示</div>
           ) : (
             <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-              {data.recentAlerts.map((a) => (
+              {data.recentAlerts.map((alert) => (
                 <div
-                  key={a.id}
+                  key={alert.id}
                   className={`alert ${
-                    a.severity === "critical"
+                    alert.severity === "critical"
                       ? "alert-error"
-                      : a.severity === "warning"
-                      ? "alert-warning"
-                      : "alert-info"
+                      : alert.severity === "warning"
+                        ? "alert-warning"
+                        : "alert-info"
                   }`}
                 >
                   <div style={{ display: "flex", justifyContent: "space-between", gap: 8 }}>
-                    <span>{a.message}</span>
+                    <span>{alert.message}</span>
                     <span className="mono" style={{ fontSize: "0.75rem", whiteSpace: "nowrap" }}>
-                      {new Date(a.ts).toLocaleTimeString("zh-CN")}
+                      {formatTime(alert.ts)}
                     </span>
                   </div>
                 </div>

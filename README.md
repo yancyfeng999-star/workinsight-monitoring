@@ -62,17 +62,18 @@ assets/               品牌与平台图标资源
 
 ## 当前状态
 
-当前源码版本：`0.1.1`。
+当前源码版本：`0.1.2`。
 
 源码已经公开，但“代码存在”“组件测试通过”“可安装发布”“真实运行验证”是不同状态。当前交付证据以 [`docs/evidence/delivery-status.json`](docs/evidence/delivery-status.json) 为准。
 
 | 范围 | 当前说明 |
 | --- | --- |
-| Agent、API、Worker、扩展、Web Console | 已有源代码、契约和组件级测试；请按组件命令复核 |
-| macOS / Windows 真机运行 | Windows 尚未完成真机证据；macOS 登录自启动和长时门禁仍需验证 |
-| 签名、公证、安装、远端发布 | 未验证，不在普通贡献流程中执行 |
-| 模型 Provider / DeepSeek 分析 | 以证据文件为准，未验证项不宣称完成 |
-| 自动更新 | Git 代码远程更新可用；终端 App 自动更新通道尚未验证 |
+| Agent、API、Worker、扩展、Web Console | 组件测试在本分支已复核：API 43、Worker 64、Web 21、扩展 63、端点 UI 5、Rust workspace 80 + fmt；详见 [`docs/reviews/2026-08-18-grok-remediation-review.md`](docs/reviews/2026-08-18-grok-remediation-review.md) |
+| 监控端本地闭环 | `runtime_verified_monitor=pass`（Task 9 E2E 3/3，本地 postgres:5433 / API 8080 / Web 3001；合成事件 + fake Provider） |
+| macOS / Windows 真机运行 | Windows 无 Runner，保持 unverified；macOS 仅为历史 debug smoke，登录自启动和长时门禁仍需验证 |
+| 模型 Provider / DeepSeek 分析 | 监控端适配器与 fake 测试存在；真实 sandbox 未调用，`deepseek_sandbox_verified=unverified` |
+| CI / GitHub Actions | [`.github/workflows/quality.yml`](.github/workflows/quality.yml) 已入库；GitHub 尚未跑过，只能记 `local_equivalent`，不能记 `ci_passed` |
+| 签名、公证、安装、远端发布、自动更新 | 未验证；Git 源码合并 ≠ 已安装 App 自动更新，也不等于签名 Release |
 
 ## 开发准备
 
@@ -123,6 +124,24 @@ npm run typecheck
 # 发布校验器
 python3 -m unittest discover -s tools/release-verifier -p 'test_*.py'
 ```
+
+### 公共仓库质量门禁（不打包 App）
+
+[`.github/workflows/quality.yml`](.github/workflows/quality.yml) 在 **pull request** 与向 **`main` 的 push** 上运行源码级质量门禁。权限仅为 `contents: read`，不读取或注入仓库 secrets。
+
+独立 job 覆盖：
+
+| Job | 内容 |
+| --- | --- |
+| `rust-agent` | 在 `macos-latest` 上跑 `cargo fmt` / Clippy / workspace tests（**不**运行 `cargo tauri build`） |
+| `api` | `npm ci`、PostgreSQL 16 服务上的 `workinsight_test` 迁移、单元与集成测试、typecheck |
+| `worker` | `npm ci`、test、typecheck |
+| `web-console` | `npm ci`、test、typecheck |
+| `browser-extension` | `npm ci`、test、扩展资源 `build`（不是 Mac App） |
+| `endpoint-ui` | `npm ci`、test、typecheck |
+| `contracts-release-verifier` | 发布校验器单测 + 契约 JSON Schema/fixtures 可解析检查 |
+
+该 workflow **不**执行 Tauri 打包、签名、公证、GitHub Release、部署或 App 安装。在 GitHub 尚未实际跑过该 workflow 之前，本地等价命令通过只能记为 `local_equivalent`，不能记为 `ci_passed`。
 
 ### Mac App 构建边界
 

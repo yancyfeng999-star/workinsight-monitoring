@@ -1,8 +1,9 @@
 import type { FastifyInstance } from "fastify";
 import type { Pool } from "pg";
 import type { AdminRole } from "../auth/admin-session.js";
-import { AdminSession, requireAdmin, setSessionCookie } from "../auth/admin-session.js";
+import { AdminSession, clearSessionCookie, readSessionToken, requireAdmin, setSessionCookie } from "../auth/admin-session.js";
 import { hashToken, verifyPasswordArgon2id, randomToken } from "../auth/password.js";
+import { AUDIT_ORG_SCOPE } from "./admin-console.js";
 
 export function registerAdminRoutes(app: FastifyInstance, pool: Pool, sessions: AdminSession): void {
   app.post<{ Body: { username?: string; password?: string } }>(
@@ -21,17 +22,15 @@ export function registerAdminRoutes(app: FastifyInstance, pool: Pool, sessions: 
       const token = await sessions.create(row.admin_user_id);
       setSessionCookie(reply, token);
       return reply.code(200).send({
-        token,
         user: { admin_user_id: row.admin_user_id, username: row.username, role: row.role, org_id: row.org_id },
       });
     }
   );
 
   app.post("/v1/admin/logout", async (req, reply) => {
-    const header = String(req.headers.authorization ?? "");
-    if (header.startsWith("Bearer ")) {
-      await sessions.destroy(header.slice(7));
-    }
+    const token = readSessionToken(req);
+    if (token) await sessions.destroy(token);
+    clearSessionCookie(reply);
     return reply.code(200).send({ ok: true });
   });
 
@@ -45,7 +44,11 @@ export function registerAdminRoutes(app: FastifyInstance, pool: Pool, sessions: 
     const admin = await requireAdmin(req, reply, sessions, ["company_admin", "internal_auditor"]);
     if (!admin) return;
     const res = await pool.query(
-      `SELECT actor, action, target, detail, occurred_at FROM audit_logs ORDER BY occurred_at DESC LIMIT 200`
+      `SELECT a.actor, a.action, a.target, a.detail, a.occurred_at
+       FROM audit_logs a
+       WHERE ${AUDIT_ORG_SCOPE}
+       ORDER BY a.occurred_at DESC LIMIT 200`,
+      [admin.org_id]
     );
     return reply.code(200).send({ logs: res.rows });
   });
@@ -57,11 +60,16 @@ export function registerAdminRoutes(app: FastifyInstance, pool: Pool, sessions: 
       if (!admin) return;
       const { subject_id, display_name } = req.body ?? {};
       if (!subject_id || !display_name) return reply.code(400).send({ error: "subject_id and display_name required" });
-      await pool.query(
+      const upsert = await pool.query(
         `INSERT INTO subjects (subject_id, org_id, display_name) VALUES ($1, $2, $3)
-         ON CONFLICT (subject_id) DO UPDATE SET display_name = EXCLUDED.display_name`,
+         ON CONFLICT (subject_id) DO UPDATE SET display_name = EXCLUDED.display_name
+         WHERE subjects.org_id = EXCLUDED.org_id
+         RETURNING subject_id`,
         [subject_id, admin.org_id, display_name]
       );
+      if (upsert.rowCount === 0) {
+        return reply.code(409).send({ error: "subject already exists in another organization" });
+      }
       await pool.query(
         `INSERT INTO audit_logs (actor, action, target, detail) VALUES ($1,$2,$3,$4)`,
         ["admin:" + admin.username, "create_subject", subject_id, "{}"]

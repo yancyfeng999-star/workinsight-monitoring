@@ -1,0 +1,168 @@
+# Source / test / typecheck quality gates only.
+# Forbidden in this workflow: cargo tauri build, signing, notarization,
+# GitHub Release creation, deployment, or App installation.
+name: quality
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+concurrency:
+  group: quality-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  rust-agent:
+    name: rust-agent
+    # macOS: Tauri 2 / workinsight-agent needs native WebKit; avoid Linux dep install.
+    # Still source-only: fmt / clippy / test — never cargo tauri build.
+    runs-on: macos-latest
+    defaults:
+      run:
+        working-directory: apps/endpoint-agent/src-tauri
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: "1.89"
+          components: rustfmt, clippy
+      - name: Format
+        run: cargo fmt --all -- --check
+      - name: Clippy
+        run: cargo clippy --workspace --all-targets --locked -- -D warnings
+      - name: Test
+        run: cargo test --workspace --locked
+
+  api:
+    name: api
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/api
+    env:
+      # Synthetic local credentials only; no repository secrets.
+      DATABASE_URL: postgres://workinsight:workinsight_dev@localhost:5432/workinsight_test
+      TEST_DATABASE_URL: postgres://workinsight:workinsight_dev@localhost:5432/workinsight_test
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: workinsight
+          POSTGRES_PASSWORD: workinsight_dev
+          POSTGRES_DB: workinsight_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U workinsight -d workinsight_test"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: apps/api/package-lock.json
+      - run: npm ci
+      - name: Migrate test database
+        run: npm run db:migrate
+      - run: npm test
+      - run: npm run test:integration
+      - run: npm run typecheck
+
+  worker:
+    name: worker
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/worker
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: apps/worker/package-lock.json
+      - run: npm ci
+      - run: npm test
+      - run: npm run typecheck
+
+  web-console:
+    name: web-console
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/web-console
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: apps/web-console/package-lock.json
+      - run: npm ci
+      - run: npm test
+      - run: npm run typecheck
+
+  browser-extension:
+    name: browser-extension
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/browser-extension
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: apps/browser-extension/package-lock.json
+      - run: npm ci
+      - run: npm test
+      - run: npm run build
+
+  endpoint-ui:
+    name: endpoint-ui
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/endpoint-agent/src-ui
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: apps/endpoint-agent/src-ui/package-lock.json
+      - run: npm ci
+      - run: npm test
+      - run: npm run typecheck
+
+  contracts-release-verifier:
+    name: contracts-release-verifier
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Release verifier unit tests
+        run: python3 -m unittest discover -s tools/release-verifier -p 'test_*.py'
+      - name: Contract schemas and fixtures are valid JSON
+        run: |
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          root = Path("packages/contracts")
+          paths = list(root.glob("*.schema.json")) + list((root / "fixtures").glob("*.json"))
+          assert paths, "expected contract schemas and fixtures"
+          for path in paths:
+              json.loads(path.read_text(encoding="utf-8"))
+              print(f"ok {path}")
+          PY

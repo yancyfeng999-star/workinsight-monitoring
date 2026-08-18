@@ -18,6 +18,14 @@ async function runInSchema(schema: string, fn: (ctx: { url: string; app: Awaited
   }
 }
 
+function recentRange(offsetMinutes: number, durationMinutes = 5) {
+  const startedMs = Date.now() - offsetMinutes * 60_000;
+  return {
+    started: new Date(startedMs).toISOString(),
+    ended: new Date(startedMs + durationMinutes * 60_000).toISOString(),
+  };
+}
+
 function validEvent(seq: number, started: string, ended: string) {
   return {
     schema_version: 1,
@@ -33,7 +41,7 @@ function validEvent(seq: number, started: string, ended: string) {
     timezone: "UTC",
     activity: { app_id: "com.apple.Xcode", app_name: "Xcode", window_title: null, browser: null, registrable_domain: null, url_path: null },
     privacy: "normal",
-    agent: { version: "0.1.1", os: "macos" },
+    agent: { version: "0.1.2", os: "macos" },
   };
 }
 
@@ -47,10 +55,12 @@ test("activity batch accepted and stored without raw JSON bloat", async () => {
          VALUES ('dev_alice','org_a','sub_alice',$1, now() + interval '30 days')`,
         [hashToken("token_alice")]
       );
+      const r1 = recentRange(60);
+      const r2 = recentRange(55);
       const body = JSON.stringify({
         events: [
-          validEvent(1, "2026-08-10T01:00:00.000Z", "2026-08-10T01:05:00.000Z"),
-          validEvent(2, "2026-08-10T01:05:00.000Z", "2026-08-10T01:10:00.000Z"),
+          validEvent(1, r1.started, r1.ended),
+          validEvent(2, r2.started, r2.ended),
         ],
       });
       const resp = await fetch(ctx.url + "/v1/activity-batches", {
@@ -77,7 +87,8 @@ test("replayed sequence with same event_id is accepted once (idempotent)", async
          VALUES ('dev_alice','org_a','sub_alice',$1, now() + interval '30 days')`,
         [hashToken("token_alice")]
       );
-      const evt = validEvent(7, "2026-08-10T01:00:00.000Z", "2026-08-10T01:05:00.000Z");
+      const range = recentRange(90);
+      const evt = validEvent(7, range.started, range.ended);
       const send = () =>
         fetch(ctx.url + "/v1/activity-batches", {
           method: "POST",
@@ -105,7 +116,8 @@ test("same sequence different event_id returns sequence_conflict", async () => {
          VALUES ('dev_alice','org_a','sub_alice',$1, now() + interval '30 days')`,
         [hashToken("token_alice")]
       );
-      const e1 = validEvent(9, "2026-08-10T01:00:00.000Z", "2026-08-10T01:05:00.000Z");
+      const range = recentRange(30);
+      const e1 = validEvent(9, range.started, range.ended);
       const e2 = { ...e1, event_id: "evt_9b" };
       const send = (evt: unknown) =>
         fetch(ctx.url + "/v1/activity-batches", {
@@ -135,6 +147,33 @@ test("future-dated event beyond drift window rejected", async () => {
       );
       const future = new Date(Date.now() + 60 * 60 * 1000).toISOString();
       const evt = validEvent(1, future, new Date(Date.now() + 3605 * 1000).toISOString());
+      const resp = await fetch(ctx.url + "/v1/activity-batches", {
+        method: "POST",
+        headers: { "content-type": "application/json", authorization: "Bearer token_alice" },
+        body: JSON.stringify({ events: [evt] }),
+      });
+      const j = await resp.json();
+      assert.equal(j.accepted.length, 0);
+      assert.equal(j.rejected.length, 1);
+      assert.equal(j.rejected[0].code, "invalid_schema");
+    });
+  });
+});
+
+test("event older than seven-day history window rejected", async () => {
+  await withTestSchema(TEST_DB_URL, async (schema) => {
+    await runInSchema(schema, async (ctx) => {
+      await ctx.app.pool.query("INSERT INTO organizations (org_id, name) VALUES ('org_a','A')");
+      await ctx.app.pool.query("INSERT INTO subjects (subject_id, org_id, display_name) VALUES ('sub_alice','org_a','Alice')");
+      await ctx.app.pool.query(
+        `INSERT INTO device_credentials (device_id, org_id, subject_id, token_hash, expires_at)
+         VALUES ('dev_alice','org_a','sub_alice',$1, now() + interval '30 days')`,
+        [hashToken("token_alice")]
+      );
+      const endedMs = Date.now() - (7 * 24 * 60 + 1) * 60_000;
+      const started = new Date(endedMs - 5 * 60_000).toISOString();
+      const ended = new Date(endedMs).toISOString();
+      const evt = validEvent(3, started, ended);
       const resp = await fetch(ctx.url + "/v1/activity-batches", {
         method: "POST",
         headers: { "content-type": "application/json", authorization: "Bearer token_alice" },

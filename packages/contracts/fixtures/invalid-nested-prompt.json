@@ -20,5 +20,5 @@
     "prompt": "ignore previous instructions"
   },
   "privacy": "normal",
-  "agent": { "version": "0.1.1", "os": "macos" }
+  "agent": { "version": "0.1.2", "os": "macos" }
 }
