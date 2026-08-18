@@ -906,7 +906,7 @@ test("insight stays rules_only with empty reports", async () => {
       const body = asRecord(result.body);
       assertExactKeys(body, INSIGHT_RESPONSE_KEYS);
       assert.equal(body.mode, "rules_only");
-      assert.ok(body.reason === null || typeof body.reason === "string");
+      assert.equal(body.reason, "model reports unavailable");
       assert.deepEqual(body.reports, []);
       const gaps = asArray(body.coverageGaps);
       for (const gap of gaps) {
@@ -917,6 +917,86 @@ test("insight stays rules_only with empty reports", async () => {
       for (const row of quality) {
         assertExactKeys(row, ["metric", "status", "value"]);
       }
+    });
+  });
+});
+
+test("insight returns persisted reports as mode ai without calling a model", async () => {
+  await withTestSchema(TEST_DB_URL, async (schema) => {
+    await runInSchema(schema, async (ctx) => {
+      await seedIdentities(ctx.app.pool);
+      await seedFacts(ctx.app.pool);
+      const today = utcDate();
+      const generatedAt = new Date().toISOString();
+      const output = {
+        summary: "Team focused on development.",
+        findings: [
+          {
+            title: "Development time",
+            explanation: "Most active seconds were development.",
+            evidence: [
+              {
+                name: "development_seconds",
+                value: 3600,
+                unit: "seconds",
+                periodStart: `${today}T00:00:00.000Z`,
+                periodEnd: `${today}T23:59:59.000Z`,
+              },
+            ],
+            recommendation: "Keep focus blocks",
+            confidence: 0.8,
+          },
+        ],
+        provider: "deepseek",
+        model: "deepseek-chat",
+        generatedAt,
+      };
+      const foreign = {
+        ...output,
+        summary: "org_b_only insight must stay hidden",
+      };
+      await ctx.app.pool.query(
+        `INSERT INTO insight_reports
+           (org_id, team_id, date, provider, model, output, evidence_snapshot_hash, generated_at)
+         VALUES
+           ('org_a','team_alpha',$1,'deepseek','deepseek-chat',$2,'hash_a', $3),
+           ('org_b','team_bravo',$1,'deepseek','deepseek-chat',$4,'hash_b', $3)`,
+        [today, JSON.stringify(output), generatedAt, JSON.stringify(foreign)]
+      );
+      await ctx.app.pool.query(
+        `INSERT INTO insight_reports
+           (org_id, team_id, date, provider, model, output, evidence_snapshot_hash, generated_at)
+         VALUES ('org_a','team_alpha',$1,'deepseek','deepseek-chat',$2,'hash_invalid', $3)`,
+        [
+          utcDate(-1),
+          JSON.stringify({
+            ...output,
+            findings: [{ ...output.findings[0], evidence: [] }],
+          }),
+          generatedAt,
+        ]
+      );
+
+      const token = await bearer(ctx, "user_admin_a");
+      const result = await api(ctx, "/v1/admin/insight", { token });
+      assert.equal(result.status, 200);
+      const body = asRecord(result.body);
+      assertExactKeys(body, INSIGHT_RESPONSE_KEYS);
+      assert.equal(body.mode, "ai");
+      assert.equal(body.reason, null);
+      const reports = asArray(body.reports);
+      assert.equal(reports.length, 1);
+      const report = asRecord(reports[0]);
+      assert.equal(report.summary, "Team focused on development.");
+      assert.equal(report.provider, "deepseek");
+      assert.equal(report.model, "deepseek-chat");
+      assert.equal(result.raw.includes("org_b_only insight must stay hidden"), false);
+      assert.equal(result.raw.includes("deepseek.com"), false);
+
+      const src = readFileSync(resolve(dirname(fileURLToPath(import.meta.url)), "../src/routes/admin-console.ts"), "utf8");
+      assert.equal(src.includes("DEEPSEEK_API_KEY"), false);
+      assert.equal(src.includes("chat/completions"), false);
+      assert.equal(src.includes("api.deepseek.com"), false);
     });
   });
 });

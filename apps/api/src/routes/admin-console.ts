@@ -12,6 +12,9 @@ import type {
   DashboardStats,
   Device,
   EnrollmentCode,
+  InsightFinding,
+  InsightMetric,
+  InsightOutput,
   InsightResponse,
   Policy,
   SubjectDetail,
@@ -645,9 +648,28 @@ async function loadInsight(pool: Pool, orgId: string): Promise<InsightResponse> 
       status: missingPerms > 0 ? "warning" : "ok",
     });
   }
+
+  const reportRes = await pool.query<{ output: unknown }>(
+    `SELECT output
+     FROM insight_reports
+     WHERE org_id = $1 AND date >= $2::date AND date <= $3::date
+     ORDER BY date DESC, generated_at DESC`,
+    [orgId, from, to]
+  );
+  const reports: InsightOutput[] = [];
+  for (const row of reportRes.rows) {
+    const parsed = parseStoredInsightOutput(row.output);
+    if (parsed) reports.push(parsed);
+  }
+  const hasCurrent = reports.length > 0;
+
   return {
-    mode: "rules_only",
-    reason: "model reports unavailable",
+    mode: hasCurrent ? "ai" : "rules_only",
+    reason: hasCurrent
+      ? null
+      : reportRes.rows.length > 0
+        ? "no current valid report"
+        : "model reports unavailable",
     coverageGaps: gapRes.rows
       .map((row) => ({
         team: row.team,
@@ -655,8 +677,81 @@ async function loadInsight(pool: Pool, orgId: string): Promise<InsightResponse> 
       }))
       .filter((row) => row.missingDays > 0),
     dataQuality,
-    reports: [],
+    reports,
   };
+}
+
+function parseStoredInsightOutput(value: unknown): InsightOutput | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const rec = value as Record<string, unknown>;
+  if (!hasExactKeys(rec, ["summary", "findings", "provider", "model", "generatedAt"])) return null;
+  if (typeof rec.summary !== "string" || rec.summary.length === 0) return null;
+  if (rec.provider !== "deepseek") return null;
+  if (typeof rec.model !== "string" || rec.model.length === 0) return null;
+  if (typeof rec.generatedAt !== "string" || Number.isNaN(Date.parse(rec.generatedAt))) return null;
+  if (!Array.isArray(rec.findings)) return null;
+  const findings: InsightFinding[] = [];
+  for (const finding of rec.findings) {
+    const parsed = parseStoredFinding(finding);
+    if (!parsed) return null;
+    findings.push(parsed);
+  }
+  return {
+    summary: rec.summary,
+    findings,
+    provider: "deepseek",
+    model: rec.model,
+    generatedAt: rec.generatedAt,
+  };
+}
+
+function parseStoredFinding(value: unknown): InsightFinding | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const rec = value as Record<string, unknown>;
+  if (!hasExactKeys(rec, ["title", "explanation", "evidence", "recommendation", "confidence"])) return null;
+  if (typeof rec.title !== "string" || rec.title.length === 0) return null;
+  if (typeof rec.explanation !== "string" || rec.explanation.length === 0) return null;
+  if (typeof rec.recommendation !== "string" || rec.recommendation.length === 0) return null;
+  if (typeof rec.confidence !== "number" || rec.confidence < 0 || rec.confidence > 1) return null;
+  if (!Array.isArray(rec.evidence) || rec.evidence.length === 0) return null;
+  const evidence: InsightMetric[] = [];
+  for (const metric of rec.evidence) {
+    const parsed = parseStoredMetric(metric);
+    if (!parsed) return null;
+    evidence.push(parsed);
+  }
+  return {
+    title: rec.title,
+    explanation: rec.explanation,
+    evidence,
+    recommendation: rec.recommendation,
+    confidence: rec.confidence,
+  };
+}
+
+function parseStoredMetric(value: unknown): InsightMetric | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const rec = value as Record<string, unknown>;
+  if (!hasExactKeys(rec, ["name", "value", "unit", "periodStart", "periodEnd"])) return null;
+  if (typeof rec.name !== "string" || rec.name.length === 0) return null;
+  if (typeof rec.value !== "number" || !Number.isFinite(rec.value)) return null;
+  if (rec.unit !== "seconds" && rec.unit !== "count" && rec.unit !== "ratio" && rec.unit !== "percent") {
+    return null;
+  }
+  if (typeof rec.periodStart !== "string" || typeof rec.periodEnd !== "string") return null;
+  return {
+    name: rec.name,
+    value: rec.value,
+    unit: rec.unit,
+    periodStart: rec.periodStart,
+    periodEnd: rec.periodEnd,
+  };
+}
+
+function hasExactKeys(value: Record<string, unknown>, allowed: readonly string[]): boolean {
+  const keys = Object.keys(value);
+  if (keys.length !== allowed.length) return false;
+  return allowed.every((key) => keys.includes(key));
 }
 
 async function loadSystemHealth(pool: Pool, orgId: string): Promise<SystemHealth> {

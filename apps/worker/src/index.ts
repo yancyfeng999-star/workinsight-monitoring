@@ -1,7 +1,9 @@
 import pg from "pg";
+import { createDeepSeekProviderFromEnv } from "./ai/deepseek.js";
 import { runClassifier } from "./jobs/classifier.js";
 import { runAggregator } from "./jobs/aggregator.js";
 import { runSummarizer } from "./jobs/summarizer.js";
+import { runInsightJobs } from "./jobs/insight.js";
 
 const DEFAULT_INTERVAL_MS = 60_000;
 const CONNECTION_STRING =
@@ -23,6 +25,12 @@ async function runOnce(pool: pg.Pool): Promise<void> {
   console.log("[worker] running summarizer...");
   const summResult = await runSummarizer(pool);
   console.log(`[worker] summarizer done: ${summResult.teamsProcessed} team(s)`);
+
+  console.log("[worker] running insight...");
+  const insightResult = await runInsightJobs(pool, createDeepSeekProviderFromEnv());
+  console.log(
+    `[worker] insight done: ${insightResult.succeeded} succeeded, ${insightResult.failed} failed, fallback=${insightResult.fallback}`
+  );
 
   console.log("[worker] cycle complete");
 }

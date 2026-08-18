@@ -269,13 +269,64 @@ describe("Insight page", () => {
     });
 
     render(<InsightPage />);
-    expect(await screen.findByText(/规则统计/)).toBeInTheDocument();
+    expect(await screen.findByText(/当前为规则统计，不是模型生成结果/)).toBeInTheDocument();
     expect(screen.getByText(/model reports unavailable/)).toBeInTheDocument();
     expect(screen.getByText("平台")).toBeInTheDocument();
     expect(screen.getByText("stale_devices")).toBeInTheDocument();
     expect(screen.queryByText(/AI 生成/)).toBeNull();
     expect(screen.queryByText(/DeepSeek/i)).toBeNull();
     expect(screen.queryByText("AI 洞察")).toBeNull();
+  });
+
+  it("renders persisted AI reports without labeling rule stats as AI-generated", async () => {
+    mockApi({
+      "/api/v1/admin/insight": {
+        body: {
+          mode: "ai",
+          reason: null,
+          coverageGaps: [{ team: "平台", missingDays: 2 }],
+          dataQuality: [{ metric: "stale_devices", value: "1", status: "warning" }],
+          reports: [
+            {
+              summary: "Team focused on development.",
+              findings: [
+                {
+                  title: "Development time",
+                  explanation: "Most active seconds were development.",
+                  evidence: [
+                    {
+                      name: "development_seconds",
+                      value: 3600,
+                      unit: "seconds",
+                      periodStart: "2026-08-17T00:00:00.000Z",
+                      periodEnd: "2026-08-18T00:00:00.000Z",
+                    },
+                  ],
+                  recommendation: "Keep focus blocks",
+                  confidence: 0.8,
+                },
+              ],
+              provider: "deepseek",
+              model: "deepseek-chat",
+              generatedAt: "2026-08-18T01:00:00.000Z",
+            },
+          ],
+        },
+      },
+    });
+
+    render(<InsightPage />);
+    expect(await screen.findByText(/当前包含模型报告/)).toBeInTheDocument();
+    expect(screen.getByText(/生成时间/)).toBeInTheDocument();
+    expect(screen.getByText(/Provider \/ 模型：deepseek \/ deepseek-chat/)).toBeInTheDocument();
+    expect(screen.getByText(/证据区间/)).toBeInTheDocument();
+    expect(screen.getByText("Development time")).toBeInTheDocument();
+    expect(screen.getByText("development_seconds")).toBeInTheDocument();
+    expect(screen.getByText(/Keep focus blocks/)).toBeInTheDocument();
+    expect(screen.getByText("平台")).toBeInTheDocument();
+    expect(screen.getByText("stale_devices")).toBeInTheDocument();
+    expect(screen.getAllByText(/规则统计（非模型生成）/).length).toBeGreaterThan(0);
+    expect(screen.queryByText("模型报告尚未接入，下方指标来自已存储的覆盖与健康事实。")).toBeNull();
   });
 
   it("shows 当前账号无此权限 on 403", async () => {
