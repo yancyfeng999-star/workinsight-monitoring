@@ -9,10 +9,12 @@ import { withTestSchema } from "./helpers/test-db.js";
 const TEST_DB_URL = process.env.TEST_DATABASE_URL ?? "postgres://workinsight:workinsight_dev@localhost:5433/workinsight_test";
 
 async function runInSchema(schema: string, fn: (ctx: { url: string; app: Awaited<ReturnType<typeof buildApp>> }) => Promise<void>) {
-  const app = await buildApp(TEST_DB_URL);
+  const conn = new URL(TEST_DB_URL);
+  // Every checked-out client must see the isolated schema (concurrent enroll uses many).
+  conn.searchParams.set("options", `-csearch_path=${schema},public`);
+  const app = await buildApp(conn.toString());
   const address = await app.app.listen({ port: 0, host: "127.0.0.1" });
   try {
-    await app.pool.query(`SET search_path TO "${schema}", public`);
     await fn({ url: address, app });
   } finally {
     await app.app.close();
@@ -123,6 +125,38 @@ test("enrollment code is single use and returns token once", async () => {
       assert.ok(j1.device_token && j1.device_token.length >= 32);
       const r2 = await fetch(ctx.url + "/v1/enroll", { method: "POST", headers: { "content-type": "application/json" }, body });
       assert.equal(r2.status, 409);
+    });
+  });
+});
+
+test("concurrent enrollment of the same code is single use", async () => {
+  await withTestSchema(TEST_DB_URL, async (schema) => {
+    await runInSchema(schema, async (ctx) => {
+      await seed(ctx);
+      const code = "concurrent-use-code-xyz";
+      await ctx.app.pool.query(
+        `INSERT INTO enrollment_codes (code_hash, org_id, subject_id, expires_at)
+         VALUES ($1,$2,$3, now() + interval '15 minutes')`,
+        [hashToken(code), "org_a", "sub_alice"]
+      );
+      const body = JSON.stringify({ enrollment_code: code, agent_version: "0.1.1", os: "macos", device_label: "test" });
+      const responses = await Promise.all(
+        Array.from({ length: 50 }, () =>
+          fetch(ctx.url + "/v1/enroll", { method: "POST", headers: { "content-type": "application/json" }, body })
+        )
+      );
+      const statuses = responses.map((r) => r.status);
+      const credentialCount = (
+        await ctx.app.pool.query(
+          `SELECT COUNT(*)::int AS n FROM device_credentials WHERE device_id <> $1`,
+          ["dev_alice"]
+        )
+      ).rows[0].n;
+      const deviceCount = (await ctx.app.pool.query(`SELECT COUNT(*)::int AS n FROM devices`)).rows[0].n;
+      assert.equal(statuses.filter((s) => s === 201).length, 1);
+      assert.equal(statuses.filter((s) => s === 409).length, 49);
+      assert.equal(credentialCount, 1);
+      assert.equal(deviceCount, 1);
     });
   });
 });
