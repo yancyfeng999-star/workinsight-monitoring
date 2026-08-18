@@ -29,7 +29,7 @@ function validEvent(seq, started, ended, orgId, deviceId, subjectId) {
     timezone: "UTC",
     activity: { app_id: "com.apple.Xcode", app_name: "Xcode", window_title: null, browser: null, registrable_domain: null, url_path: null },
     privacy: "normal",
-    agent: { version: "0.1.1", os: "macos" },
+    agent: { version: "0.1.2", os: "macos" },
   };
 }
 
@@ -53,7 +53,7 @@ test("full roundtrip: enroll -> upload -> ack -> DB -> exact delete", async () =
     const enrollResp = await fetch(`${API_BASE}/v1/enroll`, {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ enrollment_code: code, agent_version: "0.1.1", os: "macos", device_label: "e2e" }),
+      body: JSON.stringify({ enrollment_code: code, agent_version: "0.1.2", os: "macos", device_label: "e2e" }),
     });
     assert.equal(enrollResp.status, 201);
     const enrolled = await enrollResp.json();
@@ -118,7 +118,7 @@ test("offline resend is idempotent (no duplicates)", async () => {
     const enrollResp = await fetch(`${API_BASE}/v1/enroll`, {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ enrollment_code: code, agent_version: "0.1.1", os: "macos" }),
+      body: JSON.stringify({ enrollment_code: code, agent_version: "0.1.2", os: "macos" }),
     });
     assert.equal(enrollResp.status, 201);
     const enrolled = await enrollResp.json();

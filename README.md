@@ -62,7 +62,7 @@ assets/               品牌与平台图标资源
 
 ## 当前状态
 
-当前源码版本：`0.1.1`。
+当前源码版本：`0.1.2`。
 
 源码已经公开，但“代码存在”“组件测试通过”“可安装发布”“真实运行验证”是不同状态。当前交付证据以 [`docs/evidence/delivery-status.json`](docs/evidence/delivery-status.json) 为准。
 
@@ -73,7 +73,7 @@ assets/               品牌与平台图标资源
 | macOS / Windows 真机运行 | Windows 无 Runner，保持 unverified；macOS 仅为历史 debug smoke，登录自启动和长时门禁仍需验证 |
 | 模型 Provider / DeepSeek 分析 | 监控端适配器与 fake 测试存在；真实 sandbox 未调用，`deepseek_sandbox_verified=unverified` |
 | CI / GitHub Actions | [`.github/workflows/quality.yml`](.github/workflows/quality.yml) 已入库；GitHub 尚未跑过，只能记 `local_equivalent`，不能记 `ci_passed` |
-| 签名、公证、安装、远端发布、自动更新 | 未验证；Git 源码更新 ≠ `remote_release`，且本分支未 push |
+| 签名、公证、安装、远端发布、自动更新 | 未验证；Git 源码合并 ≠ 已安装 App 自动更新，也不等于签名 Release |
 
 ## 开发准备
 

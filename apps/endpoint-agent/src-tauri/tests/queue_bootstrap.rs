@@ -49,7 +49,7 @@ fn sample_event(seq: u64, marker: &str) -> Event {
         },
         privacy: Privacy::Normal,
         agent: AgentInfo {
-            version: "0.1.1".into(),
+            version: "0.1.2".into(),
             os: "macos".into(),
         },
     }

@@ -78,7 +78,7 @@ test("device cannot write into another subject's scope", async () => {
         timezone: "UTC",
         activity: { app_id: "com.x", app_name: "X", window_title: null, browser: null, registrable_domain: null, url_path: null },
         privacy: "normal",
-        agent: { version: "0.1.1", os: "macos" },
+        agent: { version: "0.1.2", os: "macos" },
       };
       const resp = await fetch(ctx.url + "/v1/activity-batches", {
         method: "POST",
@@ -120,7 +120,7 @@ test("enrollment code is single use and returns token once", async () => {
          VALUES ($1,$2,$3, now() + interval '15 minutes')`,
         [hashToken(code), "org_a", "sub_alice"]
       );
-      const body = JSON.stringify({ enrollment_code: code, agent_version: "0.1.1", os: "macos", device_label: "test" });
+      const body = JSON.stringify({ enrollment_code: code, agent_version: "0.1.2", os: "macos", device_label: "test" });
       const r1 = await fetch(ctx.url + "/v1/enroll", { method: "POST", headers: { "content-type": "application/json" }, body });
       assert.equal(r1.status, 201);
       const j1 = await r1.json();
@@ -141,7 +141,7 @@ test("concurrent enrollment of the same code is single use", async () => {
          VALUES ($1,$2,$3, now() + interval '15 minutes')`,
         [hashToken(code), "org_a", "sub_alice"]
       );
-      const body = JSON.stringify({ enrollment_code: code, agent_version: "0.1.1", os: "macos", device_label: "test" });
+      const body = JSON.stringify({ enrollment_code: code, agent_version: "0.1.2", os: "macos", device_label: "test" });
       const responses = await Promise.all(
         Array.from({ length: 50 }, () =>
           fetch(ctx.url + "/v1/enroll", { method: "POST", headers: { "content-type": "application/json" }, body })

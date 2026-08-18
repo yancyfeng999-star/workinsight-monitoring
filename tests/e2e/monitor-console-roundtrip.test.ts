@@ -48,7 +48,7 @@ function focusEvent({ eventId, seq, started, ended, orgId, deviceId, subjectId, 
       url_path: null,
     },
     privacy: "normal",
-    agent: { version: "0.1.1", os: "macos" },
+    agent: { version: "0.1.2", os: "macos" },
   };
 }
 
@@ -279,7 +279,7 @@ test(
         method: "POST",
         body: JSON.stringify({
           enrollment_code: codeA,
-          agent_version: "0.1.1",
+          agent_version: "0.1.2",
           os: "macos",
           device_label: "monitor-slice",
         }),
@@ -295,7 +295,7 @@ test(
         method: "POST",
         body: JSON.stringify({
           enrollment_code: codeB,
-          agent_version: "0.1.1",
+          agent_version: "0.1.2",
           os: "macos",
           device_label: "decoy",
         }),
@@ -388,7 +388,7 @@ test(
           health: [
             {
               device_id: deviceA,
-              agent_version: "0.1.1",
+              agent_version: "0.1.2",
               os: "macos",
               collected_at: new Date().toISOString(),
               queue_depth: 0,
@@ -562,7 +562,7 @@ test(
       assert.equal(devices.body.length, 1);
       assert.equal(devices.body[0].id, deviceA);
       assert.equal(devices.body[0].os, "macos");
-      assert.equal(devices.body[0].agentVersion, "0.1.1");
+      assert.equal(devices.body[0].agentVersion, "0.1.2");
       assert.equal(devices.body[0].lastHealth, "ok");
       assert.equal(devices.body[0].stale, false);
       assert.equal(devices.body[0].permissionsOk, true);

@@ -1,6 +1,6 @@
 {
   "device_id": "dev_fixture_001",
-  "agent_version": "0.1.1",
+  "agent_version": "0.1.2",
   "os": "macos",
   "collected_at": "2026-08-10T01:30:00.000Z",
   "queue_depth": 3,

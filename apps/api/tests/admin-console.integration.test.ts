@@ -103,9 +103,9 @@ async function seedFacts(pool: AppCtx["app"]["pool"]): Promise<void> {
   );
   await pool.query(
     `INSERT INTO devices (device_id, org_id, subject_id, agent_version, os, last_heartbeat_at) VALUES
-       ('dev_ok','org_a','sub_a','0.1.1','macos', now()),
-       ('dev_perm','org_a','sub_a','0.1.1','macos', now()),
-       ('dev_queue','org_a','sub_a2','0.1.1','windows', now()),
+       ('dev_ok','org_a','sub_a','0.1.2','macos', now()),
+       ('dev_perm','org_a','sub_a','0.1.2','macos', now()),
+       ('dev_queue','org_a','sub_a2','0.1.2','windows', now()),
        ('dev_stale','org_a','sub_a2','0.1.0','macos', now() - interval '40 minutes'),
        ('dev_never','org_a','sub_a2','0.1.0','linux', NULL),
        ('dev_bravo','org_b','sub_bravo','9.9.9','macos', now())`
@@ -113,9 +113,9 @@ async function seedFacts(pool: AppCtx["app"]["pool"]): Promise<void> {
   await pool.query(
     `INSERT INTO agent_health_samples
        (device_id, agent_version, os, collected_at, queue_depth, permissions_ok, autostart_enabled) VALUES
-       ('dev_ok','0.1.1','macos', now() - interval '1 minute', 2, true, true),
-       ('dev_perm','0.1.1','macos', now() - interval '2 minutes', 3, false, true),
-       ('dev_queue','0.1.1','windows', now() - interval '1 minute', 250, true, true),
+       ('dev_ok','0.1.2','macos', now() - interval '1 minute', 2, true, true),
+       ('dev_perm','0.1.2','macos', now() - interval '2 minutes', 3, false, true),
+       ('dev_queue','0.1.2','windows', now() - interval '1 minute', 250, true, true),
        ('dev_stale','0.1.0','macos', now() - interval '40 minutes', 1, true, true),
        ('dev_bravo','9.9.9','macos', now() - interval '30 seconds', 1, true, true)`
   );
@@ -638,13 +638,13 @@ test("enrollment is single-use, hashed, and org-scoped", async () => {
       const first = await fetch(ctx.url + "/v1/enroll", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ enrollment_code: plaintext, agent_version: "0.1.1", os: "macos" }),
+        body: JSON.stringify({ enrollment_code: plaintext, agent_version: "0.1.2", os: "macos" }),
       });
       assert.equal(first.status, 201);
       const second = await fetch(ctx.url + "/v1/enroll", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ enrollment_code: plaintext, agent_version: "0.1.1", os: "macos" }),
+        body: JSON.stringify({ enrollment_code: plaintext, agent_version: "0.1.2", os: "macos" }),
       });
       assert.equal(second.status, 409);
     });
