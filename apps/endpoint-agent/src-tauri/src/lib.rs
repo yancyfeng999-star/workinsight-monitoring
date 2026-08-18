@@ -2,7 +2,9 @@ pub mod commands;
 pub mod crash_guard;
 pub mod engine;
 pub mod enrollment;
+pub mod permissions;
 pub mod platform;
+pub mod queue_bootstrap;
 
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Mutex;
@@ -12,7 +14,6 @@ use agent_core::contract::AgentInfo;
 use chrono::Utc;
 use collection_policy::CollectionPolicy;
 use device_identity::DeviceIdentity;
-use local_store::LocalStore;
 use secret_store::SecretStore;
 use tauri::menu::{AboutMetadata, Menu, MenuItem, PredefinedMenuItem};
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
@@ -26,6 +27,8 @@ const POLICY_INTERVAL: Duration = Duration::from_secs(300);
 const HEALTH_INTERVAL: Duration = Duration::from_secs(60);
 #[allow(dead_code)]
 const SECRET_KEY_QUEUE: &str = "queue_encryption_key";
+#[allow(dead_code)]
+const DEBUG_QUEUE_KEY: [u8; 32] = *b"debug-queue-key-0000000000000000";
 const DEFAULT_BATCH_SIZE: usize = 100;
 
 fn app_data_dir() -> std::path::PathBuf {
@@ -313,27 +316,23 @@ fn collector_loop(
         }
         #[cfg(debug_assertions)]
         {
-            // Debug: use a deterministic key for testing
-            Some(*b"debug-queue-key-00000000000000000")
+            // Debug: use a deterministic 32-byte key for testing
+            Some(DEBUG_QUEUE_KEY)
         }
         #[cfg(not(any(target_os = "macos", target_os = "windows", debug_assertions)))]
         {
-            Some(*b"debug-queue-key-00000000000000000")
+            Some(DEBUG_QUEUE_KEY)
         }
     };
 
-    let store = match queue_key {
-        Some(key) => {
-            info!("opening encrypted queue");
-            LocalStore::open_encrypted(data_dir.join("queue.db").to_str().unwrap(), &key)?
-        }
-        None => {
-            warn!("no queue key available, falling back to plain store");
-            LocalStore::open(data_dir.join("queue.db").to_str().unwrap())?
-        }
-    };
+    let store = crate::queue_bootstrap::open_product_queue(
+        &data_dir.join("queue.db"),
+        queue_key.as_ref().map(|key| key.as_slice()),
+    )?;
+    info!("opening encrypted queue");
 
     let policy = CollectionPolicy::default();
+    let window_title_enabled = policy.title_enabled;
     let agent = AgentInfo {
         version: env!("CARGO_PKG_VERSION").to_string(),
         os: std::env::consts::OS.to_string(),
@@ -499,7 +498,13 @@ fn collector_loop(
 
         // Report health
         if last_health.elapsed() >= HEALTH_INTERVAL {
-            report_health(data_dir, last_upload_at, &rt);
+            report_health(
+                data_dir,
+                last_upload_at,
+                &rt,
+                queue_key.as_ref().map(|key| key.as_slice()),
+                window_title_enabled,
+            );
             last_health = std::time::Instant::now();
         }
 
@@ -521,17 +526,20 @@ fn report_health(
     data_dir: &std::path::Path,
     last_upload_at: Option<chrono::DateTime<Utc>>,
     rt: &tokio::runtime::Runtime,
+    queue_key: Option<&[u8]>,
+    window_title_enabled: bool,
 ) {
     let Some(config) = crate::enrollment::load_config(data_dir) else {
         return;
     };
-    let store = match LocalStore::open(data_dir.join("queue.db").to_str().unwrap()) {
-        Ok(s) => s,
-        Err(e) => {
-            error!("health report: queue open failed: {e}");
-            return;
-        }
-    };
+    let store =
+        match crate::queue_bootstrap::open_product_queue(&data_dir.join("queue.db"), queue_key) {
+            Ok(s) => s,
+            Err(e) => {
+                error!("health report: queue open failed: {e}");
+                return;
+            }
+        };
 
     // Real autostart status detection
     #[cfg(target_os = "macos")]
@@ -552,7 +560,7 @@ fn report_health(
         },
         &store,
         &health::HealthContext {
-            permissions_ok: true, // TODO: real permission check via macOS APIs
+            permissions_ok: crate::permissions::collection_permissions_ok(window_title_enabled),
             autostart_enabled,
             last_upload_at,
             policy_version: Some(config.policy_version),
