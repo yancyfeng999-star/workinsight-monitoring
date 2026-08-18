@@ -299,3 +299,68 @@ cd tests/e2e && E2E_DATABASE_URL=postgres://workinsight:workinsight_dev@127.0.0.
 ```
 
 That re-checks the already-proven local monitor slice. It is not a Release, push, App build, or sandbox call.
+
+## Held gates / release-readiness (Task 12)
+
+Date: 2026-08-18. Branch: `feat/2026-08-18-grok-integration-ai-release-readiness`. Source version remains **`0.1.1`**. This section is a hold-the-line record: **not** a Release, package, sign, notarize, push, or version bump.
+
+### Platform holds (unchanged)
+
+| Gate | Held value | Reason |
+| --- | --- | --- |
+| `local_build_win` | `unverified` | No Windows 11 runner. macOS compilation of Windows stubs is not Windows evidence (`docs/evidence/phase-1/windows-runtime.md`). |
+| `runtime_verified_win` | `unverified` | Same; B-007 remains blocked. |
+| `browser_distribution_verified` | `unverified` | Extension unit/mock tests and `npm run build` ≠ real Chrome/Edge unpacked or store install with a final extension ID and Native Messaging manifest. |
+| `local_package_mac` / `local_package_win` | `unverified` | This plan forbids App packaging. Do not run PowerShell/macOS packaging commands from older evidence files. |
+| `signed_package*` / `notarized_package_mac` | `unverified` | No signing or notarization credentials exercised. |
+| `remote_release` / `update_verified` / `pilot_deployed` / `user_installed` | `unverified` | No push, tag, GitHub Release, update channel, pilot, or user install. |
+| `deepseek_sandbox_verified` | `unverified` | No authorized real Provider call. |
+
+`delivery-status.json` was **not** promoted for Task 12. No over-claim found to downgrade further.
+
+### Not executed under this hold
+
+- `cargo tauri build`; no `.app` / `.dmg` / `.pkg`; no copy/install to `/Applications` or desktop
+- Windows native build, PowerShell packaging, or Windows 11 runtime
+- Real Chrome or Edge load (unpacked or store)
+- Apple signing / notarization; Windows SignTool / MSIX
+- Version bump (keep `0.1.1`); propose `0.1.2` only after the user explicitly asks for a bump and GitHub publication
+- `git push`, tags, GitHub Release, update manifest publish
+
+### Release-readiness checklist (remaining before any Release)
+
+Do **not** treat this list as authorization. Every item needs explicit user approval when it requires packaging, credentials, remote publish, or machine changes.
+
+1. **Version decision** — keep `0.1.1` until authorized; only then consider a bump (suggested future: `0.1.2` after all local gates the user requires).
+2. **Changelog** — user-facing notes for the chosen version (`CHANGELOG.md`).
+3. **Apple signing identity** — Developer ID Application (and related team/profile) available in a controlled signing environment.
+4. **Notarization credentials** — Apple ID / App Store Connect API key or equivalent; notary submission path documented.
+5. **Windows signing** — SignTool / MSIX certificate on a Windows 11 build host.
+6. **Checksums** — SHA-256 (and documented algorithm) for every published artifact.
+7. **Update manifest** — signed update metadata matching package signatures, channel, and rollback rules (`docs/operations/release-runbook.md`).
+8. **Rollback asset** — previously known-good signed package retained and blocked-version rules defined (`docs/operations/rollback-runbook.md`).
+9. **Installation / upgrade / uninstall tests** — authorized clean install → enroll → update → identity/queue retention → bad-signature reject → controlled downgrade → uninstall cleans only this product’s autostart/Native Host/local files (Mac and Windows separately).
+10. **Explicit user approval** — separate authorizations for Mac package, Windows package, signing/notarization, push/Release, browser GUI session, DeepSeek sandbox, and pilot/user install.
+
+### Final verification matrix (Task 12 snapshot)
+
+| Gate | Minimum acceptance | Status this plan |
+| --- | --- | --- |
+| Repository | Clean scoped diff; no unrelated files | Required / docs hold recorded |
+| Rust source | fmt + Clippy + workspace tests | Pass (cited Tasks 6/11) |
+| Endpoint UI | production controller tests + typecheck | Pass |
+| Extension | all tests; no full URL/private mode leakage | Pass (unit/mock; not real browser) |
+| API | unit/integration/typecheck; concurrent enrollment | Pass |
+| Worker | rule jobs + fake-Provider Insight tests/typecheck | Pass |
+| Web | API-client and production page tests/typecheck | Pass |
+| Monitor E2E | synthetic event through API/DB/Worker/Console | Pass |
+| DeepSeek sandbox | authorized real Provider call | **Unverified** |
+| macOS runtime | real background/permission/long-run evidence | **Partial** until authorized relaunch |
+| Windows runtime | Windows 11 native runner | **Unverified** |
+| Browser runtime | real Chrome and Edge | **Unverified** |
+| Mac/Windows packages | build/sign/install/upgrade | **Forbidden** in this plan |
+| GitHub Release/update/pilot | direct remote/user evidence | **Unverified** |
+
+### Version rule
+
+Source and product metadata stay at **`0.1.1`**. Do not invent `0.1.2` in manifests, tags, or Release assets until the user requests a version bump and GitHub publication after required local gates.
