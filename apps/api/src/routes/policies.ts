@@ -2,6 +2,7 @@ import type { FastifyInstance } from "fastify";
 import type { Pool } from "pg";
 import type { AdminSession, AdminRole } from "../auth/admin-session.js";
 import { requireAdmin } from "../auth/admin-session.js";
+import { hashToken } from "../auth/password.js";
 import { signPolicy, verifyPolicy, generatePolicyKeyPair } from "../policy/sign-policy.js";
 import type { PolicySigningKey } from "../policy/sign-policy.js";
 
@@ -37,7 +38,7 @@ export function registerPoliciesRoutes(
     if (!bearer) return reply.code(401).send({ error: "unauthorized" });
     const orgRes = await pool.query(
       `SELECT org_id FROM device_credentials WHERE token_hash = $1 AND revoked_at IS NULL`,
-      [hashTokenLocal(bearer)]
+      [hashToken(bearer)]
     );
     const orgRow = orgRes.rows[0];
     if (!orgRow) return reply.code(401).send({ error: "unauthorized" });
@@ -63,7 +64,7 @@ export function registerPoliciesRoutes(
     }
     const row = polRes.rows[0];
     return reply.code(200).send({
-      policy: row.payload,
+      policy: collectionPolicyForDevice(row.payload),
       signature: row.signature,
       signing_key_fingerprint: row.signing_key_fingerprint,
       signing_public_key: key.publicKeyPem,
@@ -106,7 +107,13 @@ export function registerPoliciesRoutes(
   });
 }
 
-function hashTokenLocal(token: string): string {
-  const { createHash } = require("node:crypto") as typeof import("node:crypto");
-  return createHash("sha256").update(token).digest("hex");
+function collectionPolicyForDevice(payload: unknown): unknown {
+  if (!payload || typeof payload !== "object" || Array.isArray(payload)) return payload;
+  const rec = payload as Record<string, unknown>;
+  if (rec.collection && typeof rec.collection === "object" && !Array.isArray(rec.collection)) {
+    return rec.collection;
+  }
+  const collection = { ...rec };
+  delete collection.rollout_percent;
+  return collection;
 }

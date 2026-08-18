@@ -723,6 +723,79 @@ test("policy create validates collection keys, signs, and writes audit", async (
   });
 });
 
+test("audit list does not treat a policy version as a same-org subject id", async () => {
+  await withTestSchema(TEST_DB_URL, async (schema) => {
+    await runInSchema(schema, async (ctx) => {
+      await seedIdentities(ctx.app.pool);
+      await ctx.app.pool.query(
+        `INSERT INTO subjects (subject_id, org_id, display_name) VALUES ('1','org_a','Numeric Alice')`
+      );
+      await ctx.app.pool.query(
+        `INSERT INTO audit_logs (actor, action, target, detail)
+         VALUES ('admin:admin_b','create_policy','1','{"requestId":"req_policy_b"}')`
+      );
+      const token = await bearer(ctx, "user_admin_a");
+      const result = await api(ctx, "/v1/admin/audit", { token });
+      assert.equal(result.status, 200);
+      const rows = asArray(result.body);
+      assert.equal(
+        rows.some((row) => asRecord(row).actor === "admin:admin_b"),
+        false
+      );
+      assert.equal(
+        rows.some((row) => asRecord(row).requestId === "req_policy_b"),
+        false
+      );
+      assert.equal(result.raw.includes("req_policy_b"), false);
+    });
+  });
+});
+
+test("signed collection policy sent to devices does not include rollout_percent", async () => {
+  await withTestSchema(TEST_DB_URL, async (schema) => {
+    await runInSchema(schema, async (ctx) => {
+      await seedIdentities(ctx.app.pool);
+      await ctx.app.pool.query(
+        `INSERT INTO device_credentials (device_id, org_id, subject_id, token_hash, expires_at)
+         VALUES ('dev_policy','org_a','sub_a',$1, now() + interval '30 days')`,
+        [hashToken("token_policy")]
+      );
+      const token = await bearer(ctx, "user_admin_a");
+      const created = await api(ctx, "/v1/admin/policies", {
+        method: "POST",
+        token,
+        body: JSON.stringify({ content: VALID_POLICY, rolloutPercent: 35 }),
+      });
+      assert.equal(created.status, 201);
+      assert.equal(asRecord(created.body).rolloutPercent, 35);
+
+      const stored = await ctx.app.pool.query(
+        `SELECT payload, signature FROM collection_policies WHERE org_id = 'org_a'`
+      );
+      assert.equal(stored.rows.length, 1);
+      const payload = stored.rows[0].payload as Record<string, unknown>;
+      const collection =
+        payload.collection && typeof payload.collection === "object" && !Array.isArray(payload.collection)
+          ? (payload.collection as Record<string, unknown>)
+          : payload;
+      assert.equal(Object.hasOwn(collection, "rollout_percent"), false);
+
+      const devicePol = await fetch(ctx.url + "/v1/device-policy", {
+        headers: { authorization: "Bearer token_policy" },
+      });
+      const deviceRaw = await devicePol.text();
+      assert.equal(devicePol.status, 200, deviceRaw);
+      const deviceBody = asRecord(JSON.parse(deviceRaw));
+      const devicePolicy = asRecord(deviceBody.policy);
+      assert.equal(Object.hasOwn(devicePolicy, "rollout_percent"), false);
+      assert.equal(Object.hasOwn(devicePolicy, "collection"), false);
+
+      const listed = await api(ctx, "/v1/admin/policies", { token });
+      assert.equal(asRecord(asArray(listed.body)[0]).rolloutPercent, 35);
+    });
+  });
+});
+
 test("audit filters are bound, org-scoped, and exact-keyed", async () => {
   await withTestSchema(TEST_DB_URL, async (schema) => {
     await runInSchema(schema, async (ctx) => {

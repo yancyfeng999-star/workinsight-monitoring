@@ -80,14 +80,6 @@ const AUDIT_ORG_SCOPE = `(
     WHERE a.actor = 'admin:' || u.username AND u.org_id = $1
   )
   OR EXISTS (
-    SELECT 1 FROM subjects s
-    WHERE a.target = s.subject_id AND s.org_id = $1
-  )
-  OR EXISTS (
-    SELECT 1 FROM devices d
-    WHERE a.target = d.device_id AND d.org_id = $1
-  )
-  OR EXISTS (
     SELECT 1 FROM devices d
     WHERE a.actor = 'device:' || d.device_id AND d.org_id = $1
   )
@@ -544,7 +536,7 @@ async function createPolicy(
   );
   const nextVersion = asNumber(nextRes.rows[0]?.next) || 1;
   const now = new Date();
-  const stored: Record<string, unknown> = {
+  const collection: Record<string, unknown> = {
     ...DEFAULT_POLICY,
     ...parsed.value,
     policy_version: nextVersion,
@@ -553,9 +545,9 @@ async function createPolicy(
       typeof parsed.value.expires_at === "string"
         ? parsed.value.expires_at
         : new Date(now.getTime() + 7 * 24 * 3600 * 1000).toISOString(),
-    rollout_percent: rolloutPercent,
   };
-  const sig = signPolicy(stored, key.privateKeyPem);
+  const sig = signPolicy(collection, key.privateKeyPem);
+  const stored = { collection, rollout_percent: rolloutPercent };
   const inserted = await pool.query<{ created_at: Date | string }>(
     `INSERT INTO collection_policies (policy_version, org_id, payload, signature, signing_key_fingerprint)
      VALUES ($1,$2,$3,$4,$5)
@@ -727,15 +719,30 @@ function toPolicy(row: {
   payload: Record<string, unknown>;
   created_at: Date | string;
 }): Policy {
-  const payload = row.payload ?? {};
-  const collection: Record<string, unknown> = {};
-  for (const key of ALLOWED_POLICY_KEYS) {
-    if (key in payload) collection[key] = payload[key];
-  }
+  const { collection, rolloutPercent } = unwrapStoredPolicy(row.payload ?? {});
   return {
     version: asNumber(row.policy_version),
     content: JSON.stringify(collection),
     createdAt: toIso(row.created_at),
+    rolloutPercent,
+  };
+}
+
+function unwrapStoredPolicy(payload: Record<string, unknown>): {
+  collection: Record<string, unknown>;
+  rolloutPercent: number;
+} {
+  const nested = payload.collection;
+  const source =
+    nested && typeof nested === "object" && !Array.isArray(nested)
+      ? (nested as Record<string, unknown>)
+      : payload;
+  const collection: Record<string, unknown> = {};
+  for (const key of ALLOWED_POLICY_KEYS) {
+    if (key in source) collection[key] = source[key];
+  }
+  return {
+    collection,
     rolloutPercent: asNumber(payload.rollout_percent ?? 100),
   };
 }
