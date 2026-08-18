@@ -1,7 +1,7 @@
 {
   "local_review": "pass",
   "local_tests": "pass",
-  "local_build_mac": "pass",
+  "local_build_mac": "partial",
   "local_build_win": "unverified",
   "local_build_monitor": "partial",
   "local_package_mac": "unverified",
@@ -9,7 +9,7 @@
   "local_package_browser": "pass",
   "runtime_verified_mac": "partial",
   "runtime_verified_win": "unverified",
-  "runtime_verified_monitor": "partial",
+  "runtime_verified_monitor": "pass",
   "deepseek_sandbox_verified": "unverified",
   "local_update_verified": "unverified",
   "signed_package_mac": "unverified",
