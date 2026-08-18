@@ -11,6 +11,7 @@ import { registerDevicesRoutes } from "./routes/devices.js";
 import { registerSubjectsRoutes } from "./routes/subjects.js";
 import { registerPoliciesRoutes } from "./routes/policies.js";
 import { registerAdminRoutes } from "./routes/admin.js";
+import { registerAdminConsoleRoutes } from "./routes/admin-console.js";
 
 export interface BuildOptions {
   policyPrivateKeyPem?: string;
@@ -41,6 +42,7 @@ export async function buildApp(connString: string, opts: BuildOptions = {}) {
   registerSubjectsRoutes(app, pool, sessions);
   registerPoliciesRoutes(app, pool, sessions, key);
   registerAdminRoutes(app, pool, sessions);
+  registerAdminConsoleRoutes(app, pool, sessions, key);
 
   return { app, pool, deviceAuth, sessions };
 }
